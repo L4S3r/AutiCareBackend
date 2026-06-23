@@ -22,6 +22,10 @@ const { auditLogger } = require('./middleware/audit.middleware');
 
 const app = express();
 
+// Trust Vercel's proxy so express-rate-limit can read the real client IP
+// from the X-Forwarded-For header without throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+app.set('trust proxy', 1);
+
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Security middleware
