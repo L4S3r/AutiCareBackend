@@ -86,6 +86,7 @@ const logout = async (req, res, next) => {
 };
 
 const admin = require('../config/firebase');
+const { getAuth } = require('firebase-admin/auth');
 const { sendWelcomeEmail } = require('../services/email.service');
 const Notification = require('../models/Notification.model');
 
@@ -99,7 +100,7 @@ const firebaseLogin = async (req, res, next) => {
     // Verify the Firebase ID Token using Firebase Admin SDK
     let decodedToken;
     try {
-      decodedToken = await admin.auth().verifyIdToken(idToken);
+      decodedToken = await getAuth().verifyIdToken(idToken);
     } catch (verifyErr) {
       return res.status(401).json({ error: 'Invalid Firebase ID Token: ' + verifyErr.message });
     }
