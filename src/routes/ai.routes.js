@@ -5,7 +5,35 @@ const BehaviorLog = require('../models/BehaviorLog.model');
 const GameScore = require('../models/GameScore.model');
 const GeneticReport = require('../models/GeneticReport.model');
 const ChildProfile = require('../models/ChildProfile.model');
+const Notification = require('../models/Notification.model');
+const { sendMeltdownAlertEmail } = require('../services/email.service');
 const axios = require('axios');
+
+// Helper to trigger email & in-app alerts if crisis score is high (>= 70)
+const triggerHighRiskAlerts = async (child, score, interventions) => {
+  if (score >= 70) {
+    try {
+      const populated = await ChildProfile.findById(child._id).populate('parentId', 'email name');
+      if (populated && populated.parentId) {
+        const parentEmail = populated.parentId.email;
+        // Send real email alert
+        await sendMeltdownAlertEmail(parentEmail, child.name, score, interventions);
+        // Create in-app notification
+        await Notification.create({
+          userId: populated.parentId._id,
+          title: `🚨 Critical Meltdown Risk Detected: ${child.name}`,
+          message: `Our AI system detected a high meltdown risk score of ${score}% for ${child.name}. Please check recommended interventions immediately.`,
+          type: 'alert',
+          relatedTo: 'behavior',
+          relatedId: child._id
+        });
+        console.log(`✉️ Alert dispatched to parent ${parentEmail} for high risk score: ${score}%`);
+      }
+    } catch (err) {
+      console.error('Failed to trigger high meltdown risk alerts:', err.message);
+    }
+  }
+};
 
 // GET /api/ai/health — Public endpoint: is Gemini reachable?
 router.get('/health', async (req, res) => {
@@ -129,6 +157,10 @@ Provide your response in JSON format matching the schema:
         if (resultText) {
           const prediction = JSON.parse(resultText);
           console.log('✅ Gemini prediction received — Risk Score:', prediction.riskScore, '| Level:', prediction.riskLevel);
+          
+          // Trigger email & in-app alerts if risk is high
+          await triggerHighRiskAlerts(child, prediction.riskScore, prediction.interventions);
+
           return res.json({
             success: true,
             data: {
@@ -214,6 +246,10 @@ Provide your response in JSON format matching the schema:
         : `✅ Low behavioral risk. Continue current care plan.`;
 
     console.log('⚡ Fallback result — Risk Score:', riskScore, '| Level:', riskLevel);
+    
+    // Trigger email & in-app alerts if risk is high
+    await triggerHighRiskAlerts(child, riskScore, interventions);
+
     res.json({
       success: true,
       data: {

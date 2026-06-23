@@ -85,4 +85,72 @@ const logout = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { register, login, refreshToken, getMe, logout };
+const admin = require('../config/firebase');
+const { sendWelcomeEmail } = require('../services/email.service');
+const Notification = require('../models/Notification.model');
+
+// @desc    Verify Firebase ID Token & Login / Register user session
+// @route   POST /api/auth/firebase-login
+const firebaseLogin = async (req, res, next) => {
+  try {
+    const { idToken, name, role, clinic } = req.body;
+    if (!idToken) return res.status(400).json({ error: 'Firebase ID Token is required' });
+
+    // Verify the Firebase ID Token using Firebase Admin SDK
+    let decodedToken;
+    try {
+      decodedToken = await admin.auth().verifyIdToken(idToken);
+    } catch (verifyErr) {
+      return res.status(401).json({ error: 'Invalid Firebase ID Token: ' + verifyErr.message });
+    }
+
+    const { email, uid } = decodedToken;
+
+    // Look up user in local MongoDB
+    let user = await User.findOne({ email });
+    let isNew = false;
+
+    if (!user) {
+      // If user does not exist in local MongoDB, create their profile now
+      const dummyPassword = `fb_${uid.slice(0, 10)}`;
+      user = await User.create({
+        name: name || decodedToken.name || email.split('@')[0],
+        email,
+        password: dummyPassword,
+        role: role || 'parent',
+        clinic,
+        isActive: true,
+      });
+      isNew = true;
+    }
+
+    // Generate our JWT tokens for local API session
+    const token = generateToken(user._id);
+    const rToken = generateRefreshToken(user._id);
+
+    user.refreshToken = rToken;
+    user.lastLogin = new Date();
+    await user.save({ validateBeforeSave: false });
+
+    // Send welcome email and in-app notification if new signup
+    if (isNew) {
+      try {
+        await sendWelcomeEmail(user.email, user.name);
+        await Notification.create({
+          userId: user._id,
+          title: 'Welcome to AutiCare!',
+          message: `Hello ${user.name}, your account has been successfully verified!`,
+          type: 'success',
+          relatedTo: 'system',
+        });
+      } catch (notifyErr) {
+        console.error('Failed to trigger welcome notifications:', notifyErr.message);
+      }
+    }
+
+    const userData = user.toJSON();
+    res.status(200).json({ success: true, token, refreshToken: rToken, user: userData, isNew });
+  } catch (err) { next(err); }
+};
+
+module.exports = { register, login, refreshToken, getMe, logout, firebaseLogin };
