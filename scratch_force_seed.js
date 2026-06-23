@@ -9,7 +9,10 @@ const GameScore = require('./src/models/GameScore.model');
 const seeder = require('./src/config/seeder');
 
 async function run() {
-  await mongoose.connect('mongodb://127.0.0.1:27017/auticare');
+  require('dotenv').config();
+  const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/auticare';
+  console.log('Connecting to:', uri.replace(/:([^@]+)@/, ':****@'));
+  await mongoose.connect(uri);
   console.log('Connected to DB');
   
   // Clear collections
