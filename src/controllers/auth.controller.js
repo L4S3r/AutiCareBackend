@@ -7,6 +7,23 @@ const jwt = require('jsonwebtoken');
 const register = async (req, res, next) => {
   try {
     const { name, email, password, phone, role, clinic } = req.body;
+    
+    // Enforce password complexity check for legacy registrations
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+    if (!passwordRegex.test(password)) {
+      return res.status(400).json({ 
+        error: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.' 
+      });
+    }
+
+    // Enforce username (email prefix) check
+    const emailPrefix = email ? email.split('@')[0].toLowerCase().trim() : '';
+    if (emailPrefix && emailPrefix.length >= 3 && password.toLowerCase().includes(emailPrefix)) {
+      return res.status(400).json({
+        error: 'Password cannot contain your username or email prefix.'
+      });
+    }
+
     const existing = await User.findOne({ email });
     if (existing) return res.status(400).json({ error: 'Email already registered' });
 
@@ -123,6 +140,22 @@ const firebaseLogin = async (req, res, next) => {
         isActive: true,
       });
       isNew = true;
+
+      // Handle child profile creation for new parents if child info is provided
+      if (user.role === 'parent' && req.body.childName) {
+        const ChildProfile = require('../models/ChildProfile.model');
+        try {
+          await ChildProfile.create({
+            name: req.body.childName,
+            dateOfBirth: new Date(new Date().getFullYear() - parseInt(req.body.childAge || '6'), 0, 1),
+            gender: (req.body.childGender || 'male').toLowerCase(),
+            asdLevel: (req.body.diagnosisLevel || 'level1').replace(/\s+/g, '').toLowerCase(),
+            parentId: user._id
+          });
+        } catch (childErr) {
+          console.error('Failed to create child profile in firebaseLogin:', childErr.message);
+        }
+      }
     }
 
     // Generate our JWT tokens for local API session
@@ -154,4 +187,19 @@ const firebaseLogin = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { register, login, refreshToken, getMe, logout, firebaseLogin };
+// @desc    Check if email is registered
+// @route   POST /api/auth/check-email
+const checkEmail = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (user) {
+      return res.status(200).json({ exists: true, role: user.role });
+    }
+    res.status(200).json({ exists: false });
+  } catch (err) { next(err); }
+};
+
+module.exports = { register, login, refreshToken, getMe, logout, firebaseLogin, checkEmail };
