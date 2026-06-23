@@ -140,11 +140,14 @@ const firebaseLogin = async (req, res, next) => {
         isActive: true,
       });
       isNew = true;
+    }
 
-      // Handle child profile creation for new parents if child info is provided
-      if (user.role === 'parent' && req.body.childName) {
-        const ChildProfile = require('../models/ChildProfile.model');
-        try {
+    // Handle child profile creation for parent (both new or existing parent without a child)
+    if (user.role === 'parent' && req.body.childName) {
+      const ChildProfile = require('../models/ChildProfile.model');
+      try {
+        const existingChild = await ChildProfile.findOne({ parentId: user._id, name: req.body.childName });
+        if (!existingChild) {
           await ChildProfile.create({
             name: req.body.childName,
             dateOfBirth: new Date(new Date().getFullYear() - parseInt(req.body.childAge || '6'), 0, 1),
@@ -152,9 +155,9 @@ const firebaseLogin = async (req, res, next) => {
             asdLevel: (req.body.diagnosisLevel || 'level1').replace(/\s+/g, '').toLowerCase(),
             parentId: user._id
           });
-        } catch (childErr) {
-          console.error('Failed to create child profile in firebaseLogin:', childErr.message);
         }
+      } catch (childErr) {
+        console.error('Failed to create child profile in firebaseLogin:', childErr.message);
       }
     }
 
@@ -196,7 +199,12 @@ const checkEmail = async (req, res, next) => {
 
     const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (user) {
-      return res.status(200).json({ exists: true, role: user.role });
+      if (user.role === 'parent') {
+        const ChildProfile = require('../models/ChildProfile.model');
+        const childCount = await ChildProfile.countDocuments({ parentId: user._id });
+        return res.status(200).json({ exists: true, role: user.role, hasChild: childCount > 0 });
+      }
+      return res.status(200).json({ exists: true, role: user.role, hasChild: true });
     }
     res.status(200).json({ exists: false });
   } catch (err) { next(err); }
