@@ -1,6 +1,6 @@
 const fs = require('fs');
 
-const logFilePath = 'C:\\Users\\Lenovo\\Downloads\\auti-care-backend-log-export-2026-06-23T13-44-57.json';
+const logFilePath = 'C:\\Users\\Lenovo\\Downloads\\auti-care-backend-log-export-2026-06-23T18-12-08.json';
 
 try {
   const content = fs.readFileSync(logFilePath, 'utf8');
@@ -9,12 +9,15 @@ try {
   
   const issues = logs.filter(log => {
     const msg = log.message || '';
-    const isError = log.level === 'error' || log.responseStatusCode >= 400 || msg.toLowerCase().includes('failed') || msg.toLowerCase().includes('error') || msg.toLowerCase().includes('missing');
-    return isError;
+    if (msg.includes('DeprecationWarning') || msg.includes('favicon.ico') || msg.includes('favicon.png')) {
+      return false;
+    }
+    const isError = log.level === 'error' || log.responseStatusCode >= 500 || (log.responseStatusCode >= 400 && !log.requestPath.includes('favicon') && log.requestPath !== 'auti-care-backend-2e3843e9u-i-don-t-know1.vercel.app/');
+    return isError || msg.toLowerCase().includes('error') || msg.toLowerCase().includes('exception') || msg.toLowerCase().includes('failed');
   });
 
-  console.log(`Found ${issues.length} interesting issues. Printing first 22:`);
-  issues.slice(0, 22).forEach((log, index) => {
+  console.log(`Found ${issues.length} interesting issues. Printing all:`);
+  issues.forEach((log, index) => {
     console.log(`\n--- Issue #${index + 1} ---`);
     console.log(`Time: ${log.TimeUTC} (${log.requestMethod} ${log.requestPath})`);
     console.log(`Status: ${log.responseStatusCode}`);
@@ -24,3 +27,4 @@ try {
 } catch (err) {
   console.error('Error reading log file:', err);
 }
+
