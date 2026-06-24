@@ -1,18 +1,20 @@
 const User = require('../models/User.model');
 const { generateToken, generateRefreshToken } = require('../middleware/auth.middleware');
 const jwt = require('jsonwebtoken');
+const { sendWelcomeEmail } = require('../services/email.service');
+const Notification = require('../models/Notification.model');
 
 // @desc    Register user
 // @route   POST /api/auth/register
 const register = async (req, res, next) => {
   try {
     const { name, email, password, phone, role, clinic } = req.body;
-    
+
     // Enforce password complexity check for legacy registrations
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
     if (!passwordRegex.test(password)) {
-      return res.status(400).json({ 
-        error: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.' 
+      return res.status(400).json({
+        error: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.'
       });
     }
 
@@ -30,10 +32,22 @@ const register = async (req, res, next) => {
     const user = await User.create({ name, email, password, phone, role: role || 'parent', clinic });
     const token = generateToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
-
     user.refreshToken = refreshToken;
     user.lastLogin = new Date();
     await user.save({ validateBeforeSave: false });
+    try {
+      await sendWelcomeEmail(user.email, user.name);
+      await Notification.create({
+        userId: user._id,
+        title: 'Welcome to AutiCare!',
+        message: `Hello ${user.name}, your account has been created successfully!`,
+        type: 'success',
+        relatedTo: 'system',
+      });
+    } catch (notifyErr) {
+      console.error('Welcome notification failed:', notifyErr.message);
+    }
+
 
     res.status(201).json({ success: true, token, refreshToken, user });
   } catch (err) { next(err); }
@@ -104,8 +118,6 @@ const logout = async (req, res, next) => {
 
 const admin = require('../config/firebase');
 const { getAuth } = require('firebase-admin/auth');
-const { sendWelcomeEmail } = require('../services/email.service');
-const Notification = require('../models/Notification.model');
 
 // @desc    Verify Firebase ID Token & Login / Register user session
 // @route   POST /api/auth/firebase-login
@@ -114,12 +126,22 @@ const firebaseLogin = async (req, res, next) => {
     const { idToken, name, role, clinic } = req.body;
     if (!idToken) return res.status(400).json({ error: 'Firebase ID Token is required' });
 
-    // Verify the Firebase ID Token using Firebase Admin SDK
+    // Verify the Firebase ID Token using Firebase Admin SDK or use local dev mock bypass
     let decodedToken;
-    try {
-      decodedToken = await getAuth().verifyIdToken(idToken);
-    } catch (verifyErr) {
-      return res.status(401).json({ error: 'Invalid Firebase ID Token: ' + verifyErr.message });
+    if (process.env.NODE_ENV === 'development' && idToken.startsWith('mock_token_')) {
+      const email = idToken.replace('mock_token_', '').trim().toLowerCase();
+      decodedToken = {
+        email,
+        uid: `mock_uid_${email.split('@')[0]}`,
+        name: name || email.split('@')[0],
+      };
+      console.log(`🔒 Dev mock Firebase login bypass active for: ${email}`);
+    } else {
+      try {
+        decodedToken = await getAuth().verifyIdToken(idToken);
+      } catch (verifyErr) {
+        return res.status(401).json({ error: 'Invalid Firebase ID Token: ' + verifyErr.message });
+      }
     }
 
     const { email, uid } = decodedToken;
