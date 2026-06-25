@@ -51,6 +51,15 @@ const sendWelcomeEmail = async (userEmail, userName) => {
   });
 };
 
+const sendChildCredentialsEmail = async (parentEmail, parentName, childName, childUsername, childPassword) => {
+  return sendEmail({
+    to: parentEmail,
+    subject: `AutiCare child account for ${childName}`,
+    text: `Hi ${parentName},\n\nYour child profile for ${childName} has been created.\n\nChild username: ${childUsername}\nChild password: ${childPassword}\n\nPlease keep these credentials private.\n\nWarm regards,\nThe AutiCare Team`,
+    html: `<h3>AutiCare child account created</h3><p>Hi ${parentName},</p><p>Your child profile for <strong>${childName}</strong> has been created.</p><p><strong>Child username:</strong> ${childUsername}<br/><strong>Child password:</strong> ${childPassword}</p><p>Please keep these credentials private.</p><p>Warm regards,<br/>The AutiCare Team</p>`
+  });
+};
+
 const sendMeltdownAlertEmail = async (parentEmail, childName, riskScore, suggestions) => {
   const suggestionsHtml = suggestions && suggestions.length 
     ? `<ul>${suggestions.map(s => `<li>${s}</li>`).join('')}</ul>` 
@@ -66,5 +75,6 @@ const sendMeltdownAlertEmail = async (parentEmail, childName, riskScore, suggest
 module.exports = {
   sendEmail,
   sendWelcomeEmail,
+  sendChildCredentialsEmail,
   sendMeltdownAlertEmail
 };

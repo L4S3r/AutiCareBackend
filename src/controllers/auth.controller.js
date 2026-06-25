@@ -1,14 +1,14 @@
 const User = require('../models/User.model');
 const { generateToken, generateRefreshToken } = require('../middleware/auth.middleware');
 const jwt = require('jsonwebtoken');
-const { sendWelcomeEmail } = require('../services/email.service');
+const { sendWelcomeEmail, sendChildCredentialsEmail } = require('../services/email.service');
 const Notification = require('../models/Notification.model');
 
 // @desc    Register user
 // @route   POST /api/auth/register
 const register = async (req, res, next) => {
   try {
-    const { name, email, password, phone, role, clinic } = req.body;
+    const { name, email, password, phone, role, clinic, childName, childAge, childGender, diagnosisLevel, childUsername, childPassword } = req.body;
 
     // Enforce password complexity check for legacy registrations
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
@@ -46,6 +46,30 @@ const register = async (req, res, next) => {
       });
     } catch (notifyErr) {
       console.error('Welcome notification failed:', notifyErr.message);
+    }
+
+    if (user.role === 'parent' && childName) {
+      const ChildProfile = require('../models/ChildProfile.model');
+      try {
+        const existingChild = await ChildProfile.findOne({ parentId: user._id, name: childName });
+        if (!existingChild) {
+          await ChildProfile.create({
+            name: childName,
+            username: childUsername,
+            password: childPassword,
+            dateOfBirth: new Date(new Date().getFullYear() - parseInt(childAge || '6'), 0, 1),
+            gender: (childGender || 'male').toLowerCase(),
+            asdLevel: (diagnosisLevel || 'level1').replace(/\s+/g, '').toLowerCase(),
+            parentId: user._id
+          });
+        }
+
+        if (childUsername && childPassword) {
+          await sendChildCredentialsEmail(user.email, user.name, childName, childUsername, childPassword);
+        }
+      } catch (childErr) {
+        console.error('Parent child setup failed:', childErr.message);
+      }
     }
 
 
@@ -172,11 +196,16 @@ const firebaseLogin = async (req, res, next) => {
         if (!existingChild) {
           await ChildProfile.create({
             name: req.body.childName,
+            username: req.body.childUsername,
+            password: req.body.childPassword,
             dateOfBirth: new Date(new Date().getFullYear() - parseInt(req.body.childAge || '6'), 0, 1),
             gender: (req.body.childGender || 'male').toLowerCase(),
             asdLevel: (req.body.diagnosisLevel || 'level1').replace(/\s+/g, '').toLowerCase(),
             parentId: user._id
           });
+        }
+        if (req.body.childUsername && req.body.childPassword) {
+          await sendChildCredentialsEmail(user.email, user.name, req.body.childName, req.body.childUsername, req.body.childPassword);
         }
       } catch (childErr) {
         console.error('Failed to create child profile in firebaseLogin:', childErr.message);

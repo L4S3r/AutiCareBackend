@@ -6,6 +6,17 @@ const childProfileSchema = new mongoose.Schema({
     required: [true, 'Child name is required'],
     trim: true,
   },
+  username: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    sparse: true,
+    unique: true,
+  },
+  password: {
+    type: String,
+    select: false,
+  },
   dateOfBirth: {
     type: Date,
     required: [true, 'Date of birth is required'],
