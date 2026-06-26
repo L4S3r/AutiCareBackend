@@ -32,6 +32,12 @@ const userSchema = new mongoose.Schema({
     default: 'parent',
     required: true,
   },
+
+  fcmToken: {
+    type: String,
+    default: null
+  },
+
   clinic: {
     type: String,
     trim: true,
@@ -64,19 +70,19 @@ const userSchema = new mongoose.Schema({
 });
 
 // Hash password before saving
-userSchema.pre('save', async function(next) {
+userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
   this.password = await bcrypt.hash(this.password, 12);
   next();
 });
 
 // Compare password
-userSchema.methods.comparePassword = async function(candidatePassword) {
+userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
 // Remove sensitive fields from JSON output
-userSchema.methods.toJSON = function() {
+userSchema.methods.toJSON = function () {
   const obj = this.toObject();
   delete obj.password;
   delete obj.refreshToken;

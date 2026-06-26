@@ -8,26 +8,52 @@ const ChildProfile = require('../models/ChildProfile.model');
 const Notification = require('../models/Notification.model');
 const { sendMeltdownAlertEmail } = require('../services/email.service');
 const axios = require('axios');
+const { getAuth } = require('firebase-admin/auth');
+const admin = require('firebase-admin');
 
 // Helper to trigger email & in-app alerts if crisis score is high (>= 70)
 const triggerHighRiskAlerts = async (child, score, interventions) => {
   if (score >= 70) {
     try {
-      const populated = await ChildProfile.findById(child._id).populate('parentId', 'email name');
+      // Populate both the email configuration and fcmToken from the parent user record
+      const populated = await ChildProfile.findById(child._id).populate('parentId', 'email name fcmToken');
+
       if (populated && populated.parentId) {
-        const parentEmail = populated.parentId.email;
-        // Send real email alert
-        await sendMeltdownAlertEmail(parentEmail, child.name, score, interventions);
-        // Create in-app notification
+        const parentUser = populated.parentId;
+
+        // 1. Send the background clinical evaluation alert email via Nodemailer
+        await sendMeltdownAlertEmail(parentUser.email, child.name, score, interventions);
+
+        // 2. Generate and log an in-app system notification row inside MongoDB
         await Notification.create({
-          userId: populated.parentId._id,
+          userId: parentUser._id,
           title: `🚨 Critical Meltdown Risk Detected: ${child.name}`,
           message: `Our AI system detected a high meltdown risk score of ${score}% for ${child.name}. Please check recommended interventions immediately.`,
           type: 'alert',
           relatedTo: 'behavior',
           relatedId: child._id
         });
-        console.log(`✉️ Alert dispatched to parent ${parentEmail} for high risk score: ${score}%`);
+
+        // 3. NEW: If the user has a linked device token online, dispatch an FCM push payload instantly
+        if (parentUser.fcmToken) {
+          const pushPayload = {
+            token: parentUser.fcmToken,
+            notification: {
+              title: `🚨 Alert: High Sensory Stress Detected`,
+              body: `AI analysis shows a ${score}% meltdown risk window for ${child.name}. Tap to view decompression steps.`
+            },
+            data: {
+              click_action: 'FLUTTER_NOTIFICATION_CLICK',
+              type: 'ai_insight',
+              childId: child._id.toString()
+            }
+          };
+
+          await admin.messaging().send(pushPayload);
+          console.log(`🔔 [FCM Dispatched] Live AI insight sent to parent device token.`);
+        }
+
+        console.log(`✉️ Alert dispatched to parent ${parentUser.email} for high risk score: ${score}%`);
       }
     } catch (err) {
       console.error('Failed to trigger high meltdown risk alerts:', err.message);
@@ -157,7 +183,7 @@ Provide your response in JSON format matching the schema:
         if (resultText) {
           const prediction = JSON.parse(resultText);
           console.log('✅ Gemini prediction received — Risk Score:', prediction.riskScore, '| Level:', prediction.riskLevel);
-          
+
           // Trigger email & in-app alerts if risk is high
           await triggerHighRiskAlerts(child, prediction.riskScore, prediction.interventions);
 
@@ -189,30 +215,30 @@ Provide your response in JSON format matching the schema:
     const totalMeltdowns = logs.reduce((s, l) => s + (l.meltdowns || 0), 0);
     const poorSleepDays = logs.filter(l => (l.sleepHours || 7) < 6).length;
 
-    if (avgSleep < 6) { 
-      riskScore += 25; 
-      alerts.push(req.query.lang === 'ar' ? 'تنبيه: قلة النوم المزمنة (المعدل أقل من 6 ساعات)' : 'Chronic poor sleep detected (avg < 6h)'); 
-    } else if (avgSleep < 7) { 
-      riskScore += 10; 
+    if (avgSleep < 6) {
+      riskScore += 25;
+      alerts.push(req.query.lang === 'ar' ? 'تنبيه: قلة النوم المزمنة (المعدل أقل من 6 ساعات)' : 'Chronic poor sleep detected (avg < 6h)');
+    } else if (avgSleep < 7) {
+      riskScore += 10;
     }
 
-    if (totalMeltdowns > 5) { 
-      riskScore += 30; 
-      alerts.push(req.query.lang === 'ar' ? `تنبيه: تم رصد عدد ${totalMeltdowns} نوبات انهيار في آخر 7 أيام` : `${totalMeltdowns} meltdowns in past 7 days`); 
-    } else if (totalMeltdowns > 2) { 
-      riskScore += 15; 
+    if (totalMeltdowns > 5) {
+      riskScore += 30;
+      alerts.push(req.query.lang === 'ar' ? `تنبيه: تم رصد عدد ${totalMeltdowns} نوبات انهيار في آخر 7 أيام` : `${totalMeltdowns} meltdowns in past 7 days`);
+    } else if (totalMeltdowns > 2) {
+      riskScore += 15;
     }
 
-    if (poorSleepDays >= 5) { 
-      riskScore += 20; 
-      alerts.push(req.query.lang === 'ar' ? `تنبيه: نوم مضطرب لـ ${poorSleepDays} أيام متتالية` : `Poor sleep for ${poorSleepDays} consecutive days`); 
+    if (poorSleepDays >= 5) {
+      riskScore += 20;
+      alerts.push(req.query.lang === 'ar' ? `تنبيه: نوم مضطرب لـ ${poorSleepDays} أيام متتالية` : `Poor sleep for ${poorSleepDays} consecutive days`);
     }
 
     const recentMoods = logs.slice(0, 3).map(l => l.mood);
     const negativeMoods = recentMoods.filter(m => ['sad', 'very_sad', 'anxious', 'angry'].includes(m)).length;
-    if (negativeMoods >= 2) { 
-      riskScore += 20; 
-      alerts.push(req.query.lang === 'ar' ? 'نمط مزاج سلبي مستمر' : 'Persistent negative mood pattern'); 
+    if (negativeMoods >= 2) {
+      riskScore += 20;
+      alerts.push(req.query.lang === 'ar' ? 'نمط مزاج سلبي مستمر' : 'Persistent negative mood pattern');
     }
 
     riskScore = Math.min(riskScore, 100);
@@ -246,7 +272,7 @@ Provide your response in JSON format matching the schema:
         : `✅ Low behavioral risk. Continue current care plan.`;
 
     console.log('⚡ Fallback result — Risk Score:', riskScore, '| Level:', riskLevel);
-    
+
     // Trigger email & in-app alerts if risk is high
     await triggerHighRiskAlerts(child, riskScore, interventions);
 

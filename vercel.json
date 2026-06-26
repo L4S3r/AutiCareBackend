@@ -11,5 +11,11 @@
       "src": "/(.*)",
       "dest": "api/index.js"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/notifications/daily-reminder",
+      "schedule": "0 20 * * *"
+    }
   ]
 }

@@ -21,4 +21,19 @@ router.put('/profile', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.put('/fcm-token', async (req, res, next) => {
+  try {
+    const { fcmToken } = req.body;
+    if (!fcmToken) {
+      return res.status(400).json({ error: 'fcmToken parameter is required' });
+    }
+
+    await User.findByIdAndUpdate(req.user._id, { fcmToken });
+
+    res.json({ success: true, message: 'FCM device token registered to profile successfully.' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;
