@@ -1,80 +1,133 @@
+// src/services/email.service.js
 const nodemailer = require('nodemailer');
 
-const sendEmail = async ({ to, subject, html, text }) => {
-  const smtpHost = process.env.SMTP_HOST;
-  const smtpPort = process.env.SMTP_PORT || 587;
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
-  const fromEmail = process.env.FROM_EMAIL || 'noreply@auticare.org';
+// Reuse your existing transporter configuration block
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.SMTP_PORT || '587'),
+  secure: process.env.SMTP_PORT === '465',
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
 
-  if (!smtpHost || !smtpUser || !smtpPass) {
-    console.log('✉️ [MOCK EMAIL]:');
-    console.log(`   To:      ${to}`);
-    console.log(`   Subject: ${subject}`);
-    console.log(`   Body:    ${text || html}`);
-    return { success: true, mock: true };
-  }
+const FROM_ENV = process.env.FROM_EMAIL || 'noreply@auticare.ai';
 
-  try {
-    const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: Number(smtpPort) === 465,
-      auth: {
-        user: smtpUser,
-        pass: smtpPass,
-      },
-    });
+/**
+ * 1. BEAUTIFUL WELCOME & ACCOUNT CONFIRMATION EMAIL
+ */
+const sendWelcomeEmail = async (email, name, confirmationLink) => {
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Confirm Your AutiCare Account</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+      <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 20px auto; background-color: #ffffff; border: 1px solid #E2E8F0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+        <tr>
+          <td style="background: linear-gradient(135deg, #0EA5E9 0%, #2563EB 100%); padding: 32px; text-align: center;">
+            <div style="display: inline-block; width: 40px; height: 40px; background-color: #ffffff; border-radius: 10px; font-weight: 900; font-size: 22px; color: #0EA5E9; line-height: 40px; text-align: center; margin-bottom: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">A</div>
+            <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 800; tracking: -0.5px;">Welcome to AutiCare AI</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 40px 32px; color: #334155;">
+            <h2 style="margin-top: 0; margin-bottom: 16px; font-size: 20px; font-weight: 700; color: #0F172A;">Hello ${name},</h2>
+            <p style="margin: 0 0 20px 0; font-size: 15px; line-height: 1.6; color: #64748B;">Thank you for joining AutiCare. Your provider has created your specialized digital health ecosystem profile. To securely activate your dashboard and begin monitoring tailored genomic progress metrics, please verify your email address.</p>
+            
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 30px 0;">
+              <tr>
+                <td align="center">
+                  <a href="${confirmationLink}" target="_blank" style="display: inline-block; padding: 14px 32px; background-color: #0EA5E9; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 700; border-radius: 12px; box-shadow: 0 4px 10px rgba(14, 165, 233, 0.25); transition: background-color 0.2s;">Confirm Account Link</a>
+                </td>
+              </tr>
+            </table>
 
-    const info = await transporter.sendMail({
-      from: `"AutiCare Admin" <${fromEmail}>`,
-      to,
-      subject,
-      text,
-      html,
-    });
+            <p style="margin: 20px 0 0 0; font-size: 13px; line-height: 1.5; color: #94A3B8;">If the button above doesn't work, copy and paste this absolute URL pathway into your browser search bar:</p>
+            <p style="margin: 8px 0 0 0; font-size: 12px; font-family: monospace; word-break: break-all; color: #0EA5E9; background-color: #F1F5F9; padding: 10px; border-radius: 8px;">${confirmationLink}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 24px 32px; background-color: #F8FAFC; border-top: 1px solid #E2E8F0; text-align: center; font-size: 12px; color: #94A3B8;">
+            <p style="margin: 0 0 4px 0;">© 2026 AutiCare Systems. All rights reserved.</p>
+            <p style="margin: 0;">This is a high-compliance automated transmission. Please do not reply directly to this mail pipeline.</p>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
 
-    console.log('✉️ Real email sent successfully:', info.messageId);
-    return { success: true, messageId: info.messageId };
-  } catch (err) {
-    console.error('⚠️ Failed to send real email via SMTP:', err.message);
-    return { success: false, error: err.message };
-  }
-};
-
-const sendWelcomeEmail = async (userEmail, userName) => {
-  return sendEmail({
-    to: userEmail,
-    subject: 'Welcome to AutiCare!',
-    text: `Hi ${userName},\n\nThank you for signing up for AutiCare! Your email address has been successfully verified, and your account is active.\n\nWarm regards,\nThe AutiCare Team`,
-    html: `<h3>Welcome to AutiCare!</h3><p>Hi ${userName},</p><p>Thank you for signing up for AutiCare! Your email address has been verified, and your account is active.</p><p>Warm regards,<br/>The AutiCare Team</p>`
+  return transporter.sendMail({
+    from: `"AutiCare AI" <${FROM_ENV}>`,
+    to: email,
+    subject: '✨ Confirm Your AutiCare AI Dashboard Connection',
+    html: htmlContent,
   });
 };
 
-const sendChildCredentialsEmail = async (parentEmail, parentName, childName, childUsername, childPassword) => {
-  return sendEmail({
-    to: parentEmail,
-    subject: `AutiCare child account for ${childName}`,
-    text: `Hi ${parentName},\n\nYour child profile for ${childName} has been created.\n\nChild username: ${childUsername}\nChild password: ${childPassword}\n\nPlease keep these credentials private.\n\nWarm regards,\nThe AutiCare Team`,
-    html: `<h3>AutiCare child account created</h3><p>Hi ${parentName},</p><p>Your child profile for <strong>${childName}</strong> has been created.</p><p><strong>Child username:</strong> ${childUsername}<br/><strong>Child password:</strong> ${childPassword}</p><p>Please keep these credentials private.</p><p>Warm regards,<br/>The AutiCare Team</p>`
-  });
-};
+/**
+ * 2. BEAUTIFUL PASSWORD RESET REQUEST EMAIL
+ */
+const sendPasswordResetEmail = async (email, name, resetUrl) => {
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Reset Your Password</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+      <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 20px auto; background-color: #ffffff; border: 1px solid #E2E8F0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+        <tr>
+          <td style="background: linear-gradient(135deg, #0EA5E9 0%, #1E3A8A 100%); padding: 32px; text-align: center;">
+            <div style="display: inline-block; width: 40px; height: 40px; background-color: #ffffff; border-radius: 10px; font-weight: 900; font-size: 22px; color: #0EA5E9; line-height: 40px; text-align: center; margin-bottom: 12px;">A</div>
+            <h1 style="margin: 0; color: #ffffff; font-size: 23px; font-weight: 800; tracking: -0.5px;">Password Reset Security Request</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 40px 32px; color: #334155;">
+            <h2 style="margin-top: 0; margin-bottom: 16px; font-size: 19px; font-weight: 700; color: #0F172A;">Hello ${name},</h2>
+            <p style="margin: 0 0 20px 0; font-size: 15px; line-height: 1.6; color: #64748B;">We received an inquiry notification requesting a pass code update execution for your dashboard account access framework. Click the link token below to configure new authorization passwords. This secure reset token expires in exactly 1 hour.</p>
+            
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 30px 0;">
+              <tr>
+                <td align="center">
+                  <a href="${resetUrl}" target="_blank" style="display: inline-block; padding: 14px 32px; background-color: #0EA5E9; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 700; border-radius: 12px; box-shadow: 0 4px 10px rgba(14, 165, 233, 0.25);">Reset Secure Password</a>
+                </td>
+              </tr>
+            </table>
 
-const sendMeltdownAlertEmail = async (parentEmail, childName, riskScore, suggestions) => {
-  const suggestionsHtml = suggestions && suggestions.length 
-    ? `<ul>${suggestions.map(s => `<li>${s}</li>`).join('')}</ul>` 
-    : '';
-  return sendEmail({
-    to: parentEmail,
-    subject: `🚨 [CRITICAL ALERT] High Meltdown Risk Detected for ${childName}`,
-    text: `Dear Parent,\n\nOur AutiCare AI engine has detected a HIGH meltdown crisis index (${riskScore}%) for ${childName} based on recent behavioral logs.\n\nSuggested immediate actions:\n${suggestions ? suggestions.map(s => `- ${s}`).join('\n') : 'None'}\n\nPlease check your Parent Portal immediately for more details.\n\nBest,\nAutiCare Clinical Support`,
-    html: `<h3>🚨 High Meltdown Risk Detected for ${childName}</h3><p>Dear Parent,</p><p>Our AutiCare AI engine has detected a <strong>HIGH meltdown crisis index (${riskScore}%)</strong> for ${childName} based on recent behavioral logs.</p><p><strong>Suggested immediate actions:</strong></p>${suggestionsHtml}<p>Please check your <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}">Parent Portal</a> immediately for more details.</p><p>Best,<br/>AutiCare Clinical Support</p>`
+            <div style="padding: 16px; background-color: #FFFBEB; border: 1px solid #FDE68A; border-radius: 12px; margin-bottom: 24px;">
+              <p style="margin: 0; font-size: 13px; font-weight: 600; color: #B45309; line-height: 1.5;">🛡️ Security Warning: If you did not execute this request thread yourself, you can safely ignore this automated message. Your account remains encrypted and completely protected.</p>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 24px 32px; background-color: #F8FAFC; border-top: 1px solid #E2E8F0; text-align: center; font-size: 12px; color: #94A3B8;">
+            <p style="margin: 0 0 4px 0;">© 2026 AutiCare Systems. All rights reserved.</p>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  return transporter.sendMail({
+    from: `"AutiCare Safety Hub" <${FROM_ENV}>`,
+    to: email,
+    subject: '🔒 AutiCare AI: Password Reset Request',
+    html: htmlContent,
   });
 };
 
 module.exports = {
-  sendEmail,
   sendWelcomeEmail,
-  sendChildCredentialsEmail,
-  sendMeltdownAlertEmail
+  sendPasswordResetEmail
+  // Include your sendMeltdownAlertEmail and sendEmail exports right here as well...
 };

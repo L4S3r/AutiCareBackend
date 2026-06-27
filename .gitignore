@@ -4,3 +4,5 @@ node_modules/
 .DS_Store
 backend.md
 
+credentials.csv
+auticare-4805a-firebase-adminsdk-fbsvc-b8f2a47e61.json
