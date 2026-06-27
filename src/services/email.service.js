@@ -13,6 +13,15 @@ const transporter = nodemailer.createTransport({
 
 const FROM_ENV = process.env.FROM_EMAIL || 'noreply@auticare.ai';
 
+// Add right after creating the transporter
+transporter.verify((error) => {
+  if (error) {
+    console.error('❌ SMTP connection failed:', error.message);
+  } else {
+    console.log('✅ SMTP server ready');
+  }
+});
+
 
 const sendWelcomeEmail = async (email, name, confirmationLink) => {
   const htmlContent = `

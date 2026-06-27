@@ -117,6 +117,31 @@ const register = async (req, res, next) => {
     const existing = await User.findOne({ email });
     if (existing) return res.status(400).json({ error: 'Email already registered' });
 
+    let firebaseUid;
+    try {
+      const firebaseUser = await getAuth().createUser({
+        email,
+        password,
+        displayName: name,
+      });
+      firebaseUid = firebaseUser.uid;
+    } catch (fbErr) {
+      // If Firebase user creation fails, don't proceed
+      if (fbErr.code === 'auth/email-already-exists') {
+        return res.status(400).json({ error: 'Email already registered' });
+      }
+      console.error('Firebase user creation failed:', fbErr.message);
+      // Continue without Firebase if needed, or return error
+    }
+
+    // Then generate verification link and send your custom email:
+    if (firebaseUid) {
+      const verificationLink = await getAuth().generateEmailVerificationLink(email, {
+        url: process.env.FRONTEND_URL || 'https://auti-care-frontend.vercel.app/app/login',
+      });
+      await sendWelcomeEmail(email, name, verificationLink);
+    }
+
     const user = await User.create({
       name,
       email,
