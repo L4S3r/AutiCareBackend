@@ -6,162 +6,126 @@ require('../config/firebase');
 const { getAuth } = require('firebase-admin/auth');
 const { generateToken, generateRefreshToken } = require('../middleware/auth.middleware');
 const { sendWelcomeEmail, sendPasswordResetEmail, sendChildCredentialsEmail } = require('../services/email.service');
+
 const normalizeAsdLevel = (level) => (level || 'level1').replace(/\s+/g, '').toLowerCase();
 const normalizeGender = (gender) => (gender || 'male').toLowerCase();
 
+// ─── Helper: Create child profile for parent ──────────────────────────────────
+
 const maybeCreateParentChild = async ({
-  user,
-  childName,
-  childAge,
-  childGender,
-  diagnosisLevel,
-  childUsername,
-  childPassword,
+  user, childName, childAge, childGender,
+  diagnosisLevel, childUsername, childPassword,
 }) => {
   if (user.role !== 'parent' || !childName) return;
 
-  const existingChild = await ChildProfile.findOne({
-    parentId: user._id,
+  const existingChild = await ChildProfile.findOne({ parentId: user._id, name: childName });
+  if (existingChild) return;
+
+  await ChildProfile.create({
     name: childName,
+    username: childUsername,
+    password: childPassword,
+    dateOfBirth: new Date(new Date().getFullYear() - parseInt(childAge || '6', 10), 0, 1),
+    gender: normalizeGender(childGender),
+    asdLevel: normalizeAsdLevel(diagnosisLevel),
+    parentId: user._id,
   });
 
-  let createdChild = false;
-  if (!existingChild) {
-    await ChildProfile.create({
-      name: childName,
-      username: childUsername,
-      password: childPassword,
-      dateOfBirth: new Date(
-        new Date().getFullYear() - parseInt(childAge || '6', 10),
-        0,
-        1
-      ),
-      gender: normalizeGender(childGender),
-      asdLevel: normalizeAsdLevel(diagnosisLevel),
-      parentId: user._id,
-    });
-    createdChild = true;
-  }
-
-  if (createdChild && childUsername && childPassword) {
-    await sendChildCredentialsEmail(
-      user.email,
-      user.name,
-      childName,
-      childUsername,
-      childPassword
-    );
+  if (childUsername && childPassword) {
+    await sendChildCredentialsEmail(user.email, user.name, childName, childUsername, childPassword);
   }
 };
 
-// @route POST /api/auth/forgot-password
-const handleForgotPasswordRequest = async (req, res, next) => {
+// ─── Helper: Sync Firebase user (create or clean orphan) ─────────────────────
+
+const syncFirebaseUser = async (email, password, displayName) => {
+  // Check if orphaned Firebase account exists and remove it
   try {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ error: 'Email query field parameter is required.' });
-    }
-
-    // 1. Instruct the Firebase Admin SDK to compile a raw cryptographic link token string
-    const targetLink = await getAuth().generatePasswordResetLink(email, {
-      url: process.env.FRONTEND_URL || 'http://localhost:3000/app/login',
-    });
-
-    // 2. Dispatch your custom styled HTML email layout using Nodemailer
-    await sendPasswordResetEmail(email, "AutiCare User", targetLink);
-
-    return res.status(200).json({
-      success: true,
-      message: 'Styled recovery card sent successfully to email inbox.'
-    });
+    const existing = await getAuth().getUserByEmail(email);
+    await getAuth().deleteUser(existing.uid);
+    console.log(`🗑️ Removed orphaned Firebase account for: ${email}`);
   } catch (err) {
-    console.error("✖ Admin SDK failed to generate verification payload strings:", err.message);
-    return res.status(500).json({ error: 'Failed to process identity token assignment.' });
+    if (err.code !== 'auth/user-not-found') {
+      console.error('Firebase pre-check error:', err.message);
+    }
+    // auth/user-not-found is expected — no orphan, continue
   }
+
+  // Create fresh Firebase user
+  const firebaseUser = await getAuth().createUser({ email, password, displayName });
+  return firebaseUser.uid;
 };
 
-// @desc    Register user
-// @route   POST /api/auth/register
+// ─── Helper: Send verification email via Nodemailer ──────────────────────────
+
+const sendVerificationEmail = async (email, name) => {
+  const verificationLink = await getAuth().generateEmailVerificationLink(email, {
+    url: process.env.FRONTEND_URL || 'https://auti-care-frontend.vercel.app/app/login',
+  });
+  await sendWelcomeEmail(email, name, verificationLink);
+  console.log(`✉️ Custom verification email sent to: ${email}`);
+};
+
+// ─── @route POST /api/auth/register ──────────────────────────────────────────
+
 const register = async (req, res, next) => {
   try {
     const {
-      name,
-      email,
-      password,
-      phone,
-      role,
-      clinic,
-      childName,
-      childAge,
-      childGender,
-      diagnosisLevel,
-      childUsername,
-      childPassword,
+      name, email, password, phone, role, clinic,
+      childName, childAge, childGender, diagnosisLevel,
+      childUsername, childPassword,
     } = req.body;
 
+    // Password strength validation
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
     if (!passwordRegex.test(password)) {
       return res.status(400).json({
-        error:
-          'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.',
+        error: 'Password must be at least 8 characters and contain uppercase, lowercase, number, and special character.',
       });
     }
 
+    // Password must not contain email prefix
     const emailPrefix = email ? email.split('@')[0].toLowerCase().trim() : '';
-    if (emailPrefix && emailPrefix.length >= 3 && password.toLowerCase().includes(emailPrefix)) {
-      return res.status(400).json({
-        error: 'Password cannot contain your username or email prefix.',
-      });
+    if (emailPrefix.length >= 3 && password.toLowerCase().includes(emailPrefix)) {
+      return res.status(400).json({ error: 'Password cannot contain your email prefix.' });
     }
 
-    const existing = await User.findOne({ email });
+    // Check MongoDB for existing user
+    const existing = await User.findOne({ email: email.toLowerCase().trim() });
     if (existing) return res.status(400).json({ error: 'Email already registered' });
 
+    // Sync Firebase (remove orphan if exists, then create fresh)
     let firebaseUid;
     try {
-      const firebaseUser = await getAuth().createUser({
-        email,
-        password,
-        displayName: name,
-      });
-      firebaseUid = firebaseUser.uid;
+      firebaseUid = await syncFirebaseUser(email, password, name);
     } catch (fbErr) {
-      // If Firebase user creation fails, don't proceed
       if (fbErr.code === 'auth/email-already-exists') {
         return res.status(400).json({ error: 'Email already registered' });
       }
+      // Log but don't block registration if Firebase fails
       console.error('Firebase user creation failed:', fbErr.message);
-      // Continue without Firebase if needed, or return error
     }
 
-    // Then generate verification link and send your custom email:
-    if (firebaseUid) {
-      const verificationLink = await getAuth().generateEmailVerificationLink(email, {
-        url: process.env.FRONTEND_URL || 'https://auti-care-frontend.vercel.app/app/login',
-      });
-      await sendWelcomeEmail(email, name, verificationLink);
-    }
-
+    // Create MongoDB user
     const user = await User.create({
-      name,
-      email,
-      password,
-      phone,
+      name, email: email.toLowerCase().trim(),
+      password, phone,
       role: role || 'parent',
       clinic,
     });
 
+    // Generate JWT tokens
     const token = generateToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
     user.refreshToken = refreshToken;
     user.lastLogin = new Date();
     await user.save({ validateBeforeSave: false });
 
+    // Send custom verification email + in-app notification
     try {
-      const verificationLink = await getAuth().generateEmailVerificationLink(user.email, {
-        url: process.env.FRONTEND_URL || 'http://localhost:3000/app/login',
-      });
-      await sendWelcomeEmail(user.email, user.name, verificationLink);
+      if (firebaseUid) {
+        await sendVerificationEmail(user.email, user.name);
+      }
       await Notification.create({
         userId: user._id,
         title: 'Welcome to AutiCare!',
@@ -173,15 +137,11 @@ const register = async (req, res, next) => {
       console.error('Welcome notification failed:', notifyErr.message);
     }
 
+    // Create child profile if parent
     try {
       await maybeCreateParentChild({
-        user,
-        childName,
-        childAge,
-        childGender,
-        diagnosisLevel,
-        childUsername,
-        childPassword,
+        user, childName, childAge, childGender,
+        diagnosisLevel, childUsername, childPassword,
       });
     } catch (childErr) {
       console.error('Parent child setup failed:', childErr.message);
@@ -193,8 +153,8 @@ const register = async (req, res, next) => {
   }
 };
 
-// @desc    Login user
-// @route   POST /api/auth/login
+// ─── @route POST /api/auth/login ─────────────────────────────────────────────
+
 const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -208,7 +168,6 @@ const login = async (req, res, next) => {
 
     const token = generateToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
-
     user.refreshToken = refreshToken;
     user.lastLogin = new Date();
     await user.save({ validateBeforeSave: false });
@@ -219,8 +178,8 @@ const login = async (req, res, next) => {
   }
 };
 
-// @desc    Refresh token
-// @route   POST /api/auth/refresh
+// ─── @route POST /api/auth/refresh ───────────────────────────────────────────
+
 const refreshToken = async (req, res, next) => {
   try {
     const { refreshToken: rToken } = req.body;
@@ -244,14 +203,14 @@ const refreshToken = async (req, res, next) => {
   }
 };
 
-// @desc    Get current user
-// @route   GET /api/auth/me
+// ─── @route GET /api/auth/me ──────────────────────────────────────────────────
+
 const getMe = async (req, res) => {
   res.json({ success: true, user: req.user });
 };
 
-// @desc    Logout
-// @route   POST /api/auth/logout
+// ─── @route POST /api/auth/logout ────────────────────────────────────────────
+
 const logout = async (req, res, next) => {
   try {
     await User.findByIdAndUpdate(req.user._id, { refreshToken: null });
@@ -261,8 +220,8 @@ const logout = async (req, res, next) => {
   }
 };
 
-// @desc    Verify Firebase ID Token & Login / Register user session
-// @route   POST /api/auth/firebase-login
+// ─── @route POST /api/auth/firebase-login ────────────────────────────────────
+
 const firebaseLogin = async (req, res, next) => {
   try {
     const { idToken, name, role, clinic } = req.body;
@@ -271,11 +230,7 @@ const firebaseLogin = async (req, res, next) => {
     let decodedToken;
     if (process.env.NODE_ENV === 'development' && idToken.startsWith('mock_token_')) {
       const email = idToken.replace('mock_token_', '').trim().toLowerCase();
-      decodedToken = {
-        email,
-        uid: `mock_uid_${email.split('@')[0]}`,
-        name: name || email.split('@')[0],
-      };
+      decodedToken = { email, uid: `mock_uid_${email.split('@')[0]}`, name: name || email.split('@')[0] };
       console.log(`Dev mock Firebase login bypass active for: ${email}`);
     } else {
       try {
@@ -317,21 +272,18 @@ const firebaseLogin = async (req, res, next) => {
 
     const token = generateToken(user._id);
     const rToken = generateRefreshToken(user._id);
-
     user.refreshToken = rToken;
     user.lastLogin = new Date();
     await user.save({ validateBeforeSave: false });
 
     if (isNew) {
       try {
-        const verificationLink = await getAuth().generateEmailVerificationLink(user.email, {
-          url: process.env.FRONTEND_URL || 'http://localhost:3000/app/login',
-        });
-        await sendWelcomeEmail(user.email, user.name, verificationLink);
+        // Google users are already verified via Google — just send a welcome (no verify link needed)
+        await sendWelcomeEmail(user.email, user.name, process.env.FRONTEND_URL || 'https://auti-care-frontend.vercel.app/app/login');
         await Notification.create({
           userId: user._id,
           title: 'Welcome to AutiCare!',
-          message: `Hello ${user.name}, your account has been successfully verified!`,
+          message: `Hello ${user.name}, your account has been successfully created!`,
           type: 'success',
           relatedTo: 'system',
         });
@@ -340,20 +292,14 @@ const firebaseLogin = async (req, res, next) => {
       }
     }
 
-    res.status(200).json({
-      success: true,
-      token,
-      refreshToken: rToken,
-      user: user.toJSON(),
-      isNew,
-    });
+    res.status(200).json({ success: true, token, refreshToken: rToken, user: user.toJSON(), isNew });
   } catch (err) {
     next(err);
   }
 };
 
-// @desc    Check if email is registered
-// @route   POST /api/auth/check-email
+// ─── @route POST /api/auth/check-email ───────────────────────────────────────
+
 const checkEmail = async (req, res, next) => {
   try {
     const { email } = req.body;
@@ -373,6 +319,28 @@ const checkEmail = async (req, res, next) => {
     next(err);
   }
 };
+
+// ─── @route POST /api/auth/forgot-password ───────────────────────────────────
+
+const handleForgotPasswordRequest = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required.' });
+
+    const resetLink = await getAuth().generatePasswordResetLink(email, {
+      url: process.env.FRONTEND_URL || 'https://auti-care-frontend.vercel.app/app/login',
+    });
+
+    await sendPasswordResetEmail(email, 'AutiCare User', resetLink);
+
+    return res.status(200).json({ success: true, message: 'Password reset email sent.' });
+  } catch (err) {
+    console.error('Forgot password error:', err.message);
+    return res.status(500).json({ error: 'Failed to send password reset email.' });
+  }
+};
+
+// ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
   register,
