@@ -26,9 +26,10 @@ const triggerHighRiskAlerts = async (child, score, interventions) => {
       // 2. Persist an in-app database notice instance
       await Notification.create({
         userId: parent._id,
-        text: `Urgent: Dynamic Sensory Crisis Score for ${child.name} has reached ${score}%. Review safety mitigation strategies.`,
+        title: 'High Risk Alert ⚠️',
+        message: `Urgent: Sensory crisis score for ${child.name} has reached ${score}%. Review safety mitigation strategies.`,
         type: 'alert',
-        read: false
+        relatedTo: 'system',
       });
 
       // 3. Dispatch Live Outbound Email Alert via Nodemailer Relay
