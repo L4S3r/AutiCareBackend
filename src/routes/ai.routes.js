@@ -11,8 +11,6 @@ const axios = require('axios');
 const { getAuth } = require('firebase-admin/auth');
 const admin = require('firebase-admin');
 const User = require('../models/User.model');
-const ChildProfile = require('../models/ChildProfile.model');
-const Notification = require('../models/Notification.model');
 
 // Helper to trigger email & in-app alerts if crisis score is high (>= 70)
 const triggerHighRiskAlerts = async (child, score, interventions) => {
@@ -22,7 +20,7 @@ const triggerHighRiskAlerts = async (child, score, interventions) => {
       const populatedChild = await ChildProfile.findById(child._id || child)
         .populate('parentId', 'name email fcmToken');
 
-      if (!populatedChild || !populatedConn.parentId) return;
+      if (!populatedChild || !populatedChild.parentId) return;
       const parent = populatedChild.parentId;
 
       // 2. Persist an in-app database notice instance
@@ -40,7 +38,7 @@ const triggerHighRiskAlerts = async (child, score, interventions) => {
           await sendMeltdownAlertEmail(parent.email, parent.name, child.name, score, interventions);
           console.log(`✉️ Crisis alert email successfully dispatched to: ${parent.email}`);
         } catch (mailErr) {
-          console.error('⚠️ Secondary Mail Delivery failed:', mailSenderErr.message);
+          console.error('⚠️ Secondary Mail Delivery failed:', mailErr.message);
         }
       }
 
