@@ -10,53 +10,62 @@ const { sendMeltdownAlertEmail } = require('../services/email.service');
 const axios = require('axios');
 const { getAuth } = require('firebase-admin/auth');
 const admin = require('firebase-admin');
+const User = require('../models/User.model');
+const ChildProfile = require('../models/ChildProfile.model');
+const Notification = require('../models/Notification.model');
 
 // Helper to trigger email & in-app alerts if crisis score is high (>= 70)
 const triggerHighRiskAlerts = async (child, score, interventions) => {
   if (score >= 70) {
     try {
-      // Populate both the email configuration and fcmToken from the parent user record
-      const populated = await ChildProfile.findById(child._id).populate('parentId', 'email name fcmToken');
+      // 1. Fully populate parent profile credentials
+      const populatedChild = await ChildProfile.findById(child._id || child)
+        .populate('parentId', 'name email fcmToken');
 
-      if (populated && populated.parentId) {
-        const parentUser = populated.parentId;
+      if (!populatedChild || !populatedConn.parentId) return;
+      const parent = populatedChild.parentId;
 
-        // 1. Send the background clinical evaluation alert email via Nodemailer
-        await sendMeltdownAlertEmail(parentUser.email, child.name, score, interventions);
+      // 2. Persist an in-app database notice instance
+      await Notification.create({
+        userId: parent._id,
+        text: `Urgent: Dynamic Sensory Crisis Score for ${child.name} has reached ${score}%. Review safety mitigation strategies.`,
+        type: 'alert',
+        read: false
+      });
 
-        // 2. Generate and log an in-app system notification row inside MongoDB
-        await Notification.create({
-          userId: parentUser._id,
-          title: `🚨 Critical Meltdown Risk Detected: ${child.name}`,
-          message: `Our AI system detected a high meltdown risk score of ${score}% for ${child.name}. Please check recommended interventions immediately.`,
-          type: 'alert',
-          relatedTo: 'behavior',
-          relatedId: child._id
-        });
-
-        // 3. NEW: If the user has a linked device token online, dispatch an FCM push payload instantly
-        if (parentUser.fcmToken) {
-          const pushPayload = {
-            token: parentUser.fcmToken,
-            notification: {
-              title: `🚨 Alert: High Sensory Stress Detected`,
-              body: `AI analysis shows a ${score}% meltdown risk window for ${child.name}. Tap to view decompression steps.`
-            },
-            data: {
-              click_action: 'FLUTTER_NOTIFICATION_CLICK',
-              type: 'ai_insight',
-              childId: child._id.toString()
-            }
-          };
-
-          await admin.messaging().send(pushPayload);
-          console.log(`🔔 [FCM Dispatched] Live AI insight sent to parent device token.`);
+      // 3. Dispatch Live Outbound Email Alert via Nodemailer Relay
+      if (parent.email) {
+        try {
+          // Utilizes your beautiful pre-configured email service courier methods
+          await sendMeltdownAlertEmail(parent.email, parent.name, child.name, score, interventions);
+          console.log(`✉️ Crisis alert email successfully dispatched to: ${parent.email}`);
+        } catch (mailErr) {
+          console.error('⚠️ Secondary Mail Delivery failed:', mailSenderErr.message);
         }
+      }
 
-        console.log(`✉️ Alert dispatched to parent ${parentUser.email} for high risk score: ${score}%`);
+      // 4. Dispatch Firebase Real-time Device Push Payload
+      if (parent.fcmToken) {
+        const pushPayload = {
+          token: parent.fcmToken,
+          notification: {
+            title: `⚠️ Critical Care Alert: ${child.name}`,
+            body: `Sensory score hit ${score}%. Check out recommended tracking decompression interventions right away.`
+          },
+          data: {
+            click_action: 'FLUTTER_NOTIFICATION_CLICK',
+            type: 'behavior_alert',
+            childId: String(child._id)
+          }
+        };
+
+        const response = await admin.messaging().send(pushPayload);
+        console.log(`🔔 [FCM SUCCESS] Sent tray banner alert safely: ${response}`);
+      } else {
+        console.warn(`ℹ️ Notification skipped: Parent profile document has no saved device token identifier.`);
       }
     } catch (err) {
-      console.error('Failed to trigger high meltdown risk alerts:', err.message);
+      console.error('CRITICAL: High-risk alert operational delivery layout broken:', err);
     }
   }
 };

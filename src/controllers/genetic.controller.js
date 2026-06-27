@@ -1,156 +1,182 @@
 const GeneticReport = require('../models/GeneticReport.model');
-const NutritionPlan = require('../models/NutritionPlan.model');
 const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
 
+// @desc Upload a child saliva/DNA screening report or save manual markers
 // @route POST /api/genetic/upload
 const uploadReport = async (req, res, next) => {
   try {
     const { childId, manualMarkers, notes } = req.body;
-    let reportFileUrl = req.body.reportFileUrl;
+    const uploadedBy = req.user._id;
 
-    if (req.file) {
-      const uploadDir = path.join(__dirname, '../../uploads');
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-      const fileName = `${Date.now()}-${req.file.originalname}`;
-      fs.writeFileSync(path.join(uploadDir, fileName), req.file.buffer);
-      reportFileUrl = `/uploads/${fileName}`;
+    if (!childId) {
+      return res.status(400).json({ error: 'Parameter childId is required.' });
     }
 
-    let parsedMarkers = [];
-    let ocrStatus = 'completed';
-    let isProcessed = true;
+    const reportFileName = req.file ? req.file.originalname : 'Manual Case Alignment';
 
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    if (req.file && geminiApiKey) {
+    // 1. Persist the tracking doc instance in MongoDB (default state is 'pending')
+    const report = await GeneticReport.create({
+      childId,
+      reportFileName,
+      notes,
+      uploadedBy,
+      ocrStatus: req.file ? 'processing' : 'completed',
+      isProcessed: !req.file
+    });
+
+    // ─── Case A: Manual Multi-Marker Input Override ───
+    if (!req.file && manualMarkers) {
+      let markersArray = [];
       try {
-        console.log('🔮 Running Gemini Multimodal OCR on genetic report file...');
-        const base64Data = req.file.buffer.toString('base64');
-        const prompt = `You are a clinical laboratory OCR parser. Examine the attached DNA/genetic screening report. 
-Extract genetic markers, result status (e.g., homozygous, heterozygous, normal, positive, negative), values, and notes.
-Focus on identifying major ASD-linked nutritional markers like MTHFR, VDR, HLA-DQ2, HLA-DQ8, COMT, FUT2, FADS1, FADS2.
-Provide your response strictly in JSON format matching the schema:
-{
-  "parsedMarkers": [
-    {
-      "marker": "string (name of gene/marker, e.g. MTHFR)",
-      "result": "string (homozygous, heterozygous, positive, negative, normal)",
-      "value": "string (exact mutation, e.g. C677T/A1298C, or value)",
-      "notes": "string (brief clinical extraction summary of this marker)"
-    }
-  ]
-}`;
+        markersArray = typeof manualMarkers === 'string' ? JSON.parse(manualMarkers) : manualMarkers;
+      } catch (e) {
+        markersArray = [];
+      }
 
+      report.parsedMarkers = markersArray;
+      await report.save();
+      return res.status(201).json({
+        success: true,
+        data: report,
+        message: 'Manual genomic markers recorded successfully.'
+      });
+    }
+
+    // ─── Case B: Multimodal OCR PDF/Image Analysis Loop ───
+    if (req.file) {
+      const geminiApiKey = process.env.GEMINI_API_KEY;
+      if (!geminiApiKey) {
+        report.ocrStatus = 'failed';
+        await report.save();
+        return res.status(500).json({ error: 'Server configuration error: GEMINI_API_KEY is not defined.' });
+      }
+
+      // Convert buffer stream directly into a base64 string container
+      const base64Data = req.file.buffer.toString('base64');
+
+      const systemPrompt = `Extract genetic markers, result status (homozygous, heterozygous, positive, negative, normal), variant values, and clinical notes from this autism-specific lab screening. 
+      Isolate high-impact genomic variations linked to neurodevelopmental or methylation cofactors: MTHFR (C677T/A1298C), VDR, COMT, HLA-DQ2, HLA-DQ8, FUT2, FADS1, FADS2, TNF-alpha.
+      Bypass formatting anomalies or minor typos. Return your evaluation strictly in a JSON array matching this strict schema:
+      {
+        "parsedMarkers": [
+          {
+            "marker": "string (e.g., MTHFR)",
+            "result": "string (homozygous, heterozygous, positive, negative, normal)",
+            "value": "string (exact location mutation text, e.g., C677T, or leave empty)",
+            "notes": "string (one concise sentence outlining functional metabolic impact)"
+          }
+        ]
+      }`;
+
+      try {
+        // Direct REST pipeline execution safely below Vercel's standard lambda execution limit thresholds
         const response = await axios.post(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
           {
-            contents: [
-              {
-                parts: [
-                  { text: prompt },
-                  {
-                    inlineData: {
-                      mimeType: req.file.mimetype,
-                      data: base64Data
-                    }
+            contents: [{
+              parts: [
+                { text: systemPrompt },
+                {
+                  inlineData: {
+                    mimeType: req.file.mimetype || 'application/pdf',
+                    data: base64Data
                   }
-                ]
-              }
-            ],
+                }
+              ]
+            }],
             generationConfig: {
               responseMimeType: 'application/json',
-              responseSchema: {
-                type: 'OBJECT',
-                properties: {
-                  parsedMarkers: {
-                    type: 'ARRAY',
-                    items: {
-                      type: 'OBJECT',
-                      properties: {
-                        marker: { type: 'STRING' },
-                        result: { type: 'STRING', enum: ['homozygous', 'heterozygous', 'positive', 'negative', 'normal'] },
-                        value: { type: 'STRING' },
-                        notes: { type: 'STRING' }
-                      },
-                      required: ['marker', 'result', 'value', 'notes']
-                    }
-                  }
-                },
-                required: ['parsedMarkers']
-              }
+              temperature: 0.15
             }
           },
-          { timeout: 35000 }
+          { timeout: 25000 } // Fails safely inside standard serverless route cycles
         );
 
-        const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          const parsed = JSON.parse(text);
-          if (parsed && Array.isArray(parsed.parsedMarkers)) {
-            parsedMarkers = parsed.parsedMarkers;
-            console.log(`✅ Gemini parsed ${parsedMarkers.length} genetic markers successfully.`);
+        const aiResponseText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (aiResponseText) {
+          const cleanStructuredData = JSON.parse(aiResponseText.trim());
+
+          if (cleanStructuredData.parsedMarkers) {
+            report.parsedMarkers = cleanStructuredData.parsedMarkers;
+            report.ocrStatus = 'completed';
+            report.isProcessed = true;
+            report.rawText = aiResponseText;
+            await report.save();
+          } else {
+            throw new Error("Target parent node 'parsedMarkers' was missing in structural JSON generation.");
           }
+        } else {
+          throw new Error("Received an empty content payload candidate array from the Gemini gateway.");
         }
-      } catch (err) {
-        const errMessage = err.response?.data?.error?.message || err.message;
-        console.error('⚠️ Gemini Multimodal OCR failed:', errMessage);
-        ocrStatus = 'failed';
-        isProcessed = false;
-      }
-    } else if (manualMarkers) {
-      try {
-        parsedMarkers = JSON.parse(manualMarkers);
-      } catch (_) {
-        parsedMarkers = [];
+
+      } catch (aiProcessingErr) {
+        console.error("✖ Multimodal Medical Core Processing Error:", aiProcessingErr.message);
+        report.ocrStatus = 'failed';
+        await report.save();
+
+        // Return 200 with clear flags so the Doctor UI doesn't freeze or crash out completely
+        return res.status(200).json({
+          success: false,
+          error: 'AI parsing temporarily timed out or mismatched. Please verify markers manually.',
+          data: report
+        });
       }
     }
 
-    const report = await GeneticReport.create({
-      childId,
-      reportFileUrl,
-      reportFileName: req.file?.originalname,
-      parsedMarkers,
-      uploadedBy: req.user._id,
-      notes,
-      ocrStatus,
-      isProcessed,
+    return res.status(201).json({
+      success: true,
+      data: report,
+      message: 'Medical report document loaded and evaluated safely.'
     });
-
-    res.status(201).json({ success: true, data: report });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 };
 
+// @desc Retrieve all genetic report records linked to a specific child
 // @route GET /api/genetic/:childId
 const getReports = async (req, res, next) => {
   try {
     const reports = await GeneticReport.find({ childId: req.params.childId })
-      .populate('uploadedBy', 'name role').sort('-createdAt');
+      .populate('uploadedBy', 'name role')
+      .sort('-createdAt');
     res.json({ success: true, data: reports });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 };
 
+// @desc Fetch data records for an explicit single report ID instance
 // @route GET /api/genetic/report/:id
 const getReport = async (req, res, next) => {
   try {
     const report = await GeneticReport.findById(req.params.id).populate('uploadedBy', 'name role');
-    if (!report) return res.status(404).json({ error: 'Report not found' });
+    if (!report) return res.status(404).json({ error: 'Report reference not found' });
     res.json({ success: true, data: report });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 };
 
+// @desc Doctor-approved direct correction payload mapping override
 // @route PUT /api/genetic/report/:id/markers
 const updateMarkers = async (req, res, next) => {
   try {
     const report = await GeneticReport.findByIdAndUpdate(
-      req.params.id, { parsedMarkers: req.body.markers, isProcessed: true, ocrStatus: 'completed' },
+      req.params.id,
+      {
+        parsedMarkers: req.body.markers,
+        isProcessed: true,
+        ocrStatus: 'completed'
+      },
       { new: true }
     );
-    if (!report) return res.status(404).json({ error: 'Report not found' });
+    if (!report) return res.status(404).json({ error: 'Report reference not found' });
     res.json({ success: true, data: report });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 };
 
 module.exports = { uploadReport, getReports, getReport, updateMarkers };

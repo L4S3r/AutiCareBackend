@@ -6,7 +6,7 @@ require('../config/firebase');
 const { getAuth } = require('firebase-admin/auth');
 const { generateToken, generateRefreshToken } = require('../middleware/auth.middleware');
 const { sendWelcomeEmail, sendChildCredentialsEmail } = require('../services/email.service');
-
+const { sendPasswordResetEmail, sendWelcomeEmail } = require('../services/email.service');
 const normalizeAsdLevel = (level) => (level || 'level1').replace(/\s+/g, '').toLowerCase();
 const normalizeGender = (gender) => (gender || 'male').toLowerCase();
 
@@ -52,6 +52,32 @@ const maybeCreateParentChild = async ({
       childUsername,
       childPassword
     );
+  }
+};
+
+// @route POST /api/auth/forgot-password
+const handleForgotPasswordRequest = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Email query field parameter is required.' });
+    }
+
+    // 1. Instruct the Firebase Admin SDK to compile a raw cryptographic link token string
+    const targetLink = await getAuth().generatePasswordResetLink(email, {
+      url: process.env.FRONTEND_URL || 'http://localhost:3000/app/login',
+    });
+
+    // 2. Dispatch your custom styled HTML email layout using Nodemailer
+    await sendPasswordResetEmail(email, "AutiCare User", targetLink);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Styled recovery card sent successfully to email inbox.'
+    });
+  } catch (err) {
+    console.error("✖ Admin SDK failed to generate verification payload strings:", err.message);
+    return res.status(500).json({ error: 'Failed to process identity token assignment.' });
   }
 };
 
