@@ -1,14 +1,28 @@
 require('dotenv').config();
-const app = require('./app');
-const connectDB = require('./config/database');
+const app = require('../src/app');
+const connectDB = require('../src/config/database');
 
-const PORT = process.env.PORT || 5000;
+let isConnected = false;
 
-connectDB().then(() => {
-  app.listen(PORT, () => {
-    console.log(`🚀 AutiCare API running on port ${PORT} in ${process.env.NODE_ENV} mode`);
-  });
-}).catch(err => {
-  console.error('Failed to connect to database:', err);
-  process.exit(1);
-});
+module.exports = async (req, res) => {
+  // ✅ Short-circuit preflight immediately — CORS is handled by Express middleware,
+  //    no DB connection needed whatsoever for OPTIONS.
+  if (req.method === 'OPTIONS') {
+    return app(req, res);
+  }
+
+  if (!isConnected) {
+    try {
+      await connectDB();
+      isConnected = true;
+    } catch (err) {
+      console.error('❌ DB connection failed:', err.message);
+      return res.status(503).json({
+        success: false,
+        error: 'Service temporarily unavailable. Please try again shortly.',
+      });
+    }
+  }
+
+  return app(req, res);
+};
