@@ -351,4 +351,5 @@ module.exports = {
   logout,
   firebaseLogin,
   checkEmail,
+  handleForgotPasswordRequest,
 };
