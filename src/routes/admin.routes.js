@@ -7,8 +7,14 @@ const BehaviorLog = require('../models/BehaviorLog.model');
 const GeneticReport = require('../models/GeneticReport.model');
 const NutritionPlan = require('../models/NutritionPlan.model');
 const AuditLog = require('../models/AuditLog.model');
+const { getAdminStats, getAdminUsers, getAuditLogs } = require('../controllers/admin.controller');
+const { authorizeAdmin } = require('../middleware/auth.middleware');
 
 router.use(protect, authorize('admin'));
+
+router.get('/stats', authorizeAdmin, getAdminStats);
+router.get('/users', authorizeAdmin, getAdminUsers);
+router.get('/logs', authorizeAdmin, getAuditLogs);
 
 // GET /api/admin/stats
 router.get('/stats', async (req, res, next) => {

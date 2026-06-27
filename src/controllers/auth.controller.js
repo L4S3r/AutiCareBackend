@@ -5,8 +5,7 @@ const jwt = require('jsonwebtoken');
 require('../config/firebase');
 const { getAuth } = require('firebase-admin/auth');
 const { generateToken, generateRefreshToken } = require('../middleware/auth.middleware');
-const { sendWelcomeEmail, sendChildCredentialsEmail } = require('../services/email.service');
-const { sendPasswordResetEmail, sendWelcomeEmail } = require('../services/email.service');
+const { sendWelcomeEmail, sendPasswordResetEmail, sendChildCredentialsEmail } = require('../services/email.service');
 const normalizeAsdLevel = (level) => (level || 'level1').replace(/\s+/g, '').toLowerCase();
 const normalizeGender = (gender) => (gender || 'male').toLowerCase();
 

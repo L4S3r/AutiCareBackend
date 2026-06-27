@@ -117,4 +117,58 @@ const sendPasswordResetEmail = async (email, name, resetUrl) => {
   });
 };
 
-module.exports = { sendWelcomeEmail, sendPasswordResetEmail };
+const sendChildCredentialsEmail = async (parentEmail, parentName, childName, childUsername, childPassword) => {
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <body style="margin:0;padding:0;background-color:#0f172a;font-family:'Segoe UI',sans-serif;color:#f1f5f9;">
+      <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%"
+        style="max-width:560px;margin:40px auto;background-color:#1e293b;border-radius:16px;border:1px solid #334155;overflow:hidden;">
+        <tr>
+          <td style="padding:32px 40px 20px 40px;background:linear-gradient(135deg,#7c3aed,#4f46e5);">
+            <h1 style="margin:0;font-size:24px;font-weight:800;color:#ffffff;">AutiCare AI</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:40px;">
+            <h2 style="margin:0 0 16px 0;font-size:20px;font-weight:700;color:#ffffff;">Child Profile Created</h2>
+            <p style="margin:0 0 24px 0;font-size:15px;line-height:1.6;color:#94a3b8;">Hello ${parentName},</p>
+            <p style="margin:0 0 24px 0;font-size:15px;line-height:1.6;color:#94a3b8;">
+              A child profile has been created for <strong style="color:#a78bfa;">${childName}</strong>.
+              Here are their login credentials:
+            </p>
+            <table style="width:100%;background-color:#0f172a;border-radius:12px;border:1px solid #334155;padding:20px;border-spacing:0;">
+              <tr>
+                <td style="padding:8px 16px;color:#64748b;font-size:13px;">Username</td>
+                <td style="padding:8px 16px;color:#f1f5f9;font-size:15px;font-weight:600;">${childUsername}</td>
+              </tr>
+              <tr>
+                <td style="padding:8px 16px;color:#64748b;font-size:13px;">Password</td>
+                <td style="padding:8px 16px;color:#f1f5f9;font-size:15px;font-weight:600;">${childPassword}</td>
+              </tr>
+            </table>
+            <p style="margin:24px 0 0 0;font-size:13px;line-height:1.5;color:#64748b;">
+              Please store these credentials securely. You can update them anytime from the parent dashboard.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 40px;background-color:#111827;border-top:1px solid #334155;text-align:center;">
+            <p style="margin:0;font-size:12px;color:#4b5563;">© 2026 AutiCare AI · HIPAA Protected Health Architecture</p>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  return transporter.sendMail({
+    from: `"AutiCare AI" <${FROM_ENV}>`,
+    to: parentEmail,
+    subject: '🧒 AutiCare: Child Profile Created',
+    html: htmlContent,
+  });
+};
+
+
+module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendChildCredentialsEmail };
