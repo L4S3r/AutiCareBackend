@@ -170,5 +170,24 @@ const sendChildCredentialsEmail = async (parentEmail, parentName, childName, chi
   });
 };
 
+const sendMeltdownAlertEmail = async (parentEmail, parentName, childName, score, interventions) => {
+  const interventionList = interventions
+    .map(i => `<li>${i}</li>`)
+    .join('');
 
-module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendChildCredentialsEmail };
+  await transporter.sendMail({
+    from: `"AutiCare AI" <${FROM_ENV}>`,
+    to: parentEmail,
+    subject: `⚠️ High Risk Alert for ${childName} — AutiCare`,
+    html: `
+      <h2>Hi ${parentName},</h2>
+      <p>A high behavioral risk score of <strong>${score}%</strong> has been detected for <strong>${childName}</strong>.</p>
+      <h3>Recommended Interventions:</h3>
+      <ul>${interventionList}</ul>
+      <p>Please review the AutiCare app for more details.</p>
+    `,
+  });
+};
+
+
+module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendChildCredentialsEmail, sendMeltdownAlertEmail, };

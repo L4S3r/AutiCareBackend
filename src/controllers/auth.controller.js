@@ -133,7 +133,10 @@ const register = async (req, res, next) => {
     await user.save({ validateBeforeSave: false });
 
     try {
-      await sendWelcomeEmail(user.email, user.name);
+      const verificationLink = await getAuth().generateEmailVerificationLink(user.email, {
+        url: process.env.FRONTEND_URL || 'http://localhost:3000/app/login',
+      });
+      await sendWelcomeEmail(user.email, user.name, verificationLink);
       await Notification.create({
         userId: user._id,
         title: 'Welcome to AutiCare!',
@@ -296,7 +299,10 @@ const firebaseLogin = async (req, res, next) => {
 
     if (isNew) {
       try {
-        await sendWelcomeEmail(user.email, user.name);
+        const verificationLink = await getAuth().generateEmailVerificationLink(user.email, {
+          url: process.env.FRONTEND_URL || 'http://localhost:3000/app/login',
+        });
+        await sendWelcomeEmail(user.email, user.name, verificationLink);
         await Notification.create({
           userId: user._id,
           title: 'Welcome to AutiCare!',
