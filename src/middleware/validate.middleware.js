@@ -73,36 +73,12 @@ const firebaseLoginSchema = Joi.object({
   role: Joi.string().valid(...ALLOWED_ROLES, 'admin').default('parent'),
   clinic: Joi.string().trim().max(120).optional().allow('', null),
 
-  childName: Joi.string().trim().max(100).when('role', {
-    is: 'parent',
-    then: Joi.required(),
-    otherwise: Joi.optional().allow('', null)
-  }),
-  childAge: Joi.number().integer().min(1).max(18).when('role', {
-    is: 'parent',
-    then: Joi.required(),
-    otherwise: Joi.optional().allow(null)
-  }),
-  childGender: Joi.string().valid(...ALLOWED_GENDER).when('role', {
-    is: 'parent',
-    then: Joi.required(),
-    otherwise: Joi.optional().allow(null)
-  }),
-  diagnosisLevel: Joi.string().valid(...ALLOWED_ASD).when('role', {
-    is: 'parent',
-    then: Joi.required(),
-    otherwise: Joi.optional().allow(null)
-  }),
-  childUsername: Joi.string().trim().lowercase().max(50).when('role', {
-    is: 'parent',
-    then: Joi.required(),
-    otherwise: Joi.optional().allow('', null)
-  }),
-  childPassword: Joi.string().min(6).max(128).when('role', {
-    is: 'parent',
-    then: Joi.required(),
-    otherwise: Joi.optional().allow('', null)
-  }),
+  childName: Joi.string().trim().max(100).optional().allow('', null),
+  childAge: Joi.number().integer().min(1).max(18).optional().allow(null),
+  childGender: Joi.string().valid(...ALLOWED_GENDER).optional().allow(null),
+  diagnosisLevel: Joi.string().valid(...ALLOWED_ASD).optional().allow(null),
+  childUsername: Joi.string().trim().lowercase().max(50).optional().allow('', null),
+  childPassword: Joi.string().min(6).max(128).optional().allow('', null),
 });
 
 /**

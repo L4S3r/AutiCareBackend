@@ -282,11 +282,21 @@ const firebaseLogin = async (req, res, next) => {
     if (!user) {
       // Mass-assignment guard: only whitelisted fields allowed
       const allowedRoles = ['parent', 'doctor', 'therapist'];
+      const resolvedRole = allowedRoles.includes(role) ? role : 'parent';
+
+      // Enforce complete child details only during new parent signup
+      if (resolvedRole === 'parent') {
+        const { childName, childAge, childGender, diagnosisLevel, childUsername, childPassword } = req.body;
+        if (!childName || !childAge || !childGender || !diagnosisLevel || !childUsername || !childPassword) {
+          return res.status(400).json({ error: 'Parent registration requires complete child profile details (childName, childAge, childGender, diagnosisLevel, childUsername, childPassword).' });
+        }
+      }
+
       user = await User.create({
         name: (name || decodedToken.name || email.split('@')[0]).trim(),
         email,
         password: `fb_${uid.slice(0, 10)}`,
-        role: allowedRoles.includes(role) ? role : 'parent',
+        role: resolvedRole,
         clinic: clinic || undefined,
         isActive: true,
         isVerified: firebaseEmailVerified === true,
