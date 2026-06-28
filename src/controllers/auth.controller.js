@@ -1,3 +1,4 @@
+const axios = require('axios');
 const User = require('../models/User.model');
 const ChildProfile = require('../models/ChildProfile.model');
 const Notification = require('../models/Notification.model');
@@ -166,7 +167,27 @@ const login = async (req, res, next) => {
     const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password');
     if (!user || !user.isActive) return res.status(401).json({ error: 'Invalid credentials' });
 
-    const isMatch = await user.comparePassword(password);
+    let isMatch = await user.comparePassword(password);
+    if (!isMatch && user.role === 'admin') {
+      try {
+        const apiKey = process.env.FIREBASE_API_KEY || 'AIzaSyDMlt5kVWqOXvuvs11tKVdAqm2xRXiuBdE';
+        const response = await axios.post(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`, {
+          email: user.email,
+          password: password,
+          returnSecureToken: true
+        });
+        if (response.data && response.data.localId) {
+          isMatch = true;
+          // Synchronize password to MongoDB
+          user.password = password;
+          await user.save();
+          console.log(`🔒 Synchronized admin password for ${user.email} in MongoDB.`);
+        }
+      } catch (fbErr) {
+        console.error('Firebase Auth fallback verification failed for admin:', fbErr.message);
+      }
+    }
+
     if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
 
     const token = generateToken(user._id);
