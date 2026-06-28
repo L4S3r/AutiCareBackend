@@ -25,7 +25,13 @@ const protect = async (req, res, next) => {
     // JWT_SECRET is guaranteed non-empty by the boot guard above
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id).select('-password -refreshToken');
-    if (!user || !user.isActive) return res.status(401).json({ error: 'User not found or inactive.' });
+    if (!user) return res.status(401).json({ error: 'User not found.' });
+    if (!user.isActive) {
+      return res.status(403).json({
+        error: 'Account suspended. Contact your clinical administrator.',
+        code: 'ACCOUNT_DISABLED',
+      });
+    }
 
     // Email verification gate — blocks dashboard access until the user clicks
     // the verification link sent at registration. Firebase/Google users are

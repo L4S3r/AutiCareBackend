@@ -165,7 +165,7 @@ const login = async (req, res, next) => {
     if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
 
     const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password');
-    if (!user || !user.isActive) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
     let isMatch = await user.comparePassword(password);
     if (!isMatch && user.role === 'admin') {
@@ -189,6 +189,13 @@ const login = async (req, res, next) => {
     }
 
     if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
+
+    if (!user.isActive) {
+      return res.status(403).json({
+        error: 'Account suspended. Contact your clinical administrator.',
+        code: 'ACCOUNT_DISABLED',
+      });
+    }
 
     const token = generateToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
@@ -262,6 +269,14 @@ const firebaseLogin = async (req, res, next) => {
 
     const { email, uid, email_verified: firebaseEmailVerified } = decodedToken;
     let user = await User.findOne({ email });
+    
+    if (user && !user.isActive) {
+      return res.status(403).json({
+        error: 'Account suspended. Contact your clinical administrator.',
+        code: 'ACCOUNT_DISABLED',
+      });
+    }
+    
     let isNew = false;
 
     if (!user) {

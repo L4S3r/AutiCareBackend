@@ -158,6 +158,13 @@ const localRuleEngine = (markers) => {
   const foodRestrictions = [];
   const lifestyleGuidance = [];
   const markersAnalyzed = [];
+  const guidelines = [];
+
+  const mealMap = {
+    Breakfast: new Set(),
+    Lunch: new Set(),
+    Dinner: new Set()
+  };
 
   markers.forEach(m => {
     const marker = m.marker?.toUpperCase();
@@ -170,43 +177,83 @@ const localRuleEngine = (markers) => {
       supplements.push({ name: 'Methylcobalamin (B12)', dosage: '1000mcg', frequency: 'Daily', notes: 'Active B12 form' });
       foodRestrictions.push('Avoid synthetic folic acid (fortified foods)');
       lifestyleGuidance.push('Monitor homocysteine levels every 6 months');
+      guidelines.push('Requires folate-dense green vegetables and methylated B-vitamin cofactors to bypass the MTHFR block.');
+      
+      mealMap.Breakfast.add('Spinach and pasture-raised egg scramble');
+      mealMap.Lunch.add('Romaine chicken lettuce wraps with avocado');
+      mealMap.Dinner.add('Pan-seared salmon with steamed broccoli and asparagus');
     }
     if (marker === 'VDR') {
       supplements.push({ name: 'Vitamin D3 + K2', dosage: '2000-4000 IU', frequency: 'Daily with fat', notes: 'Monitor serum 25-OH-D levels' });
       lifestyleGuidance.push('20–30 minutes of safe sun exposure daily');
+      guidelines.push('Requires high calcium and Vitamin D absorption optimization to support VDR expression.');
+      
+      mealMap.Breakfast.add('Mushroom and pasture-raised egg omelet');
+      mealMap.Lunch.add('Wild-caught sockeye salmon salad');
+      mealMap.Dinner.add('Sardines cooked in olive oil with sweet potato mash');
     }
     if (marker === 'COMT') {
       foodRestrictions.push('Low tyramine diet (aged cheeses, fermented foods)');
       supplements.push({ name: 'Magnesium Glycinate', dosage: '200mg', frequency: 'Daily evening', notes: 'Supports COMT pathway' });
+      guidelines.push('Requires low-catechol and low-tyramine foods to avoid overloading slow COMT clearance.');
+      
+      mealMap.Breakfast.add('Coconut flour chia pudding with fresh berries');
+      mealMap.Lunch.add('Fresh pasture-raised chicken breast with zucchini ribbons');
+      mealMap.Dinner.add('Oven-roasted turkey breast with fresh green beans');
     }
     if (marker === 'HLA-DQ2' || marker === 'HLA-DQ8') {
       foodRestrictions.push('Strict gluten-free diet (wheat, barley, rye)');
       lifestyleGuidance.push('Test for celiac disease antibodies');
+      guidelines.push('Requires strict gluten elimination due to HLA-DQ2/8 celiac genetic predisposition.');
+      
+      mealMap.Breakfast.add('Warm quinoa porridge with wild blueberries');
+      mealMap.Lunch.add('Brown rice bowl with steamed vegetables and tahini');
+      mealMap.Dinner.add('Grilled chicken with roasted butternut squash');
     }
     if (marker === 'FADS1' || marker === 'FADS2') {
       supplements.push({ name: 'Omega-3 (EPA/DHA)', dosage: '1000-2000mg', frequency: 'Daily with meals', notes: 'Compensates for reduced FADS conversion' });
+      guidelines.push('Requires pre-formed long-chain omega-3 fatty acids (EPA/DHA) due to poor plant ALA conversion.');
+      
+      mealMap.Breakfast.add('Smoked salmon slices with sliced cucumber');
+      mealMap.Lunch.add('Sardine and avocado salad');
+      mealMap.Dinner.add('Pan-seared mackerel with steamed broccoli');
     }
     if (marker === 'FUT2') {
       supplements.push({ name: 'Bifidobacterium Probiotic', dosage: '10-25 billion CFU', frequency: 'Daily', notes: 'FUT2 variants reduce gut microbiome diversity' });
+      guidelines.push('Requires prebiotic-rich foods to feed beneficial gut flora for non-secretor status.');
+      
+      mealMap.Breakfast.add('Warm certified gluten-free oatmeal with dandelion greens');
+      mealMap.Lunch.add('Steamed asparagus salad with artichoke hearts');
+      mealMap.Dinner.add('Baked chicken breast with roasted chicory root blend');
     }
     if (marker === 'TNF-ALPHA') {
       lifestyleGuidance.push('Anti-inflammatory diet (Mediterranean pattern)');
       foodRestrictions.push('Minimize processed foods, refined sugars, trans fats');
+      guidelines.push('Requires antioxidant-rich, anti-inflammatory dietary patterns to suppress TNF-alpha levels.');
+      
+      mealMap.Breakfast.add('Mixed berry fruit bowl with organic walnuts');
+      mealMap.Lunch.add('Turmeric-spiced grilled chicken salad');
+      mealMap.Dinner.add('Baked cod with olive oil and steamed spinach');
     }
   });
 
+  // Safe defaults if list is empty or small
+  if (mealMap.Breakfast.size === 0) mealMap.Breakfast.add('Gluten-free oats with berries');
+  if (mealMap.Lunch.size === 0) mealMap.Lunch.add('Grilled protein with colorful vegetables');
+  if (mealMap.Dinner.size === 0) mealMap.Dinner.add('Fatty fish with sweet potato');
+
   return {
     supplements,
-    nutritionPlan: 'Personalized nutrition plan based on genetic analysis. Focus on whole foods, adequate hydration, and consistent meal timing.',
-    foodRestrictions,
+    nutritionPlan: `Personalized nutrition plan based on ${markersAnalyzed.length} genetic markers. Core guidelines: ${guidelines.join(' ')} Focus on clean whole foods, adequate hydration, and consistent meal timing.`,
+    foodRestrictions: Array.from(new Set(foodRestrictions)),
     mealSuggestions: [
-      { mealType: 'Breakfast', suggestions: ['Eggs with leafy greens', 'Gluten-free oats with berries', 'Smoothie with nut butter'], restrictions: [] },
-      { mealType: 'Lunch', suggestions: ['Grilled protein with colorful vegetables', 'Quinoa bowl', 'Legume soup'], restrictions: [] },
-      { mealType: 'Dinner', suggestions: ['Fatty fish with sweet potato', 'Chicken with roasted vegetables', 'Rice with beans and greens'], restrictions: [] },
+      { mealType: 'Breakfast', suggestions: Array.from(mealMap.Breakfast) },
+      { mealType: 'Lunch', suggestions: Array.from(mealMap.Lunch) },
+      { mealType: 'Dinner', suggestions: Array.from(mealMap.Dinner) },
     ],
     lifestyleGuidance,
     markersAnalyzed,
-    reasoning: `Plan generated based on ${markersAnalyzed.length} positive genetic markers. All recommendations require physician review before implementation.`,
+    reasoning: `Plan generated dynamically via local rule engine based on ${markersAnalyzed.length} positive genetic markers: ${markersAnalyzed.join(', ')}. All recommendations require physician review before implementation.`,
   };
 };
 
