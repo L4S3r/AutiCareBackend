@@ -1,5 +1,27 @@
 const GeneticReport = require('../models/GeneticReport.model');
 const axios = require('axios');
+const { randomUUID } = require('crypto');
+
+// ─── Confirmed MIME table (mirrors magic-byte check in genetic.routes.js) ────
+// We derive the safe MIME from the buffer itself, never from the client header.
+const SIGNATURE_MIME_MAP = [
+  { bytes: [0x25, 0x50, 0x44, 0x46, 0x2D], mime: 'application/pdf', ext: 'pdf'  },
+  { bytes: [0x89, 0x50, 0x4E, 0x47, 0x0D], mime: 'image/png',       ext: 'png'  },
+  { bytes: [0xFF, 0xD8, 0xFF],             mime: 'image/jpeg',      ext: 'jpg'  },
+  { bytes: [0x47, 0x49, 0x46, 0x38],       mime: 'image/gif',       ext: 'gif'  },
+  { bytes: [0x52, 0x49, 0x46, 0x46],       mime: 'image/webp',      ext: 'webp' },
+];
+
+/**
+ * Derives the MIME type and safe extension from the buffer's magic bytes.
+ * Returns null if no match is found (should never reach here; route guards first).
+ */
+const getMimeFromBuffer = (buf) => {
+  for (const sig of SIGNATURE_MIME_MAP) {
+    if (sig.bytes.every((b, i) => buf[i] === b)) return sig;
+  }
+  return null;
+};
 
 // @desc Upload a child saliva/DNA screening report or save manual markers
 // @route POST /api/genetic/upload
@@ -12,7 +34,14 @@ const uploadReport = async (req, res, next) => {
       return res.status(400).json({ error: 'Parameter childId is required.' });
     }
 
-    const reportFileName = req.file ? req.file.originalname : 'Manual Case Alignment';
+    // Sanitize the stored filename: never use the client-supplied originalname.
+    // Generate a UUID-based name with a whitelist extension derived from magic bytes.
+    let reportFileName = 'Manual Case Alignment';
+    if (req.file) {
+      const sigInfo = getMimeFromBuffer(req.file.buffer);
+      const safeExt = sigInfo ? sigInfo.ext : 'bin';
+      reportFileName = `${randomUUID()}.${safeExt}`;
+    }
 
     // 1. Persist the tracking doc instance in MongoDB (default state is 'pending')
     const report = await GeneticReport.create({
@@ -51,8 +80,21 @@ const uploadReport = async (req, res, next) => {
         return res.status(500).json({ error: 'Server configuration error: GEMINI_API_KEY is not defined.' });
       }
 
+      // Hard buffer size gate — prevents memory exhaustion before base64 encoding.
+      // Route-level multer limit is 10 MB; we enforce a tighter 9 MB here.
+      const MAX_AI_BUFFER_BYTES = 9 * 1024 * 1024;
+      if (req.file.buffer.length > MAX_AI_BUFFER_BYTES) {
+        report.ocrStatus = 'failed';
+        await report.save();
+        return res.status(413).json({ error: 'File exceeds the maximum size allowed for AI processing (9 MB).' });
+      }
+
       // Convert buffer stream directly into a base64 string container
       const base64Data = req.file.buffer.toString('base64');
+
+      // Derive the confirmed MIME from the buffer itself — never trust req.file.mimetype
+      const sigInfo   = getMimeFromBuffer(req.file.buffer);
+      const safeMime  = sigInfo ? sigInfo.mime : 'application/octet-stream';
 
       const systemPrompt = `Extract genetic markers, result status (homozygous, heterozygous, positive, negative, normal), variant values, and clinical notes from this autism-specific lab screening. 
       Isolate high-impact genomic variations linked to neurodevelopmental or methylation cofactors: MTHFR (C677T/A1298C), VDR, COMT, HLA-DQ2, HLA-DQ8, FUT2, FADS1, FADS2, TNF-alpha.
@@ -78,7 +120,8 @@ const uploadReport = async (req, res, next) => {
                 { text: systemPrompt },
                 {
                   inlineData: {
-                    mimeType: req.file.mimetype || 'application/pdf',
+                    // safeMime is derived from buffer magic bytes — not from the client header
+                    mimeType: safeMime,
                     data: base64Data
                   }
                 }

@@ -106,12 +106,15 @@ const register = async (req, res, next) => {
       console.error('Firebase user creation failed:', fbErr.message);
     }
 
-    // Create MongoDB user
+    // Create MongoDB user — only whitelisted fields permitted (mass-assignment guard)
+    const allowedRoles = ['parent', 'doctor', 'therapist'];
     const user = await User.create({
-      name, email: email.toLowerCase().trim(),
-      password, phone,
-      role: role || 'parent',
-      clinic,
+      name: (name || '').trim(),
+      email: email.toLowerCase().trim(),
+      password,
+      phone: phone || undefined,
+      role: allowedRoles.includes(role) ? role : 'parent',
+      clinic: clinic || undefined,
     });
 
     // Generate JWT tokens
@@ -185,7 +188,8 @@ const refreshToken = async (req, res, next) => {
     const { refreshToken: rToken } = req.body;
     if (!rToken) return res.status(401).json({ error: 'Refresh token required' });
 
-    const decoded = jwt.verify(rToken, process.env.JWT_REFRESH_SECRET || 'refresh-secret');
+    // JWT_REFRESH_SECRET guaranteed non-empty by boot guard in auth.middleware.js
+    const decoded = jwt.verify(rToken, process.env.JWT_REFRESH_SECRET);
     const user = await User.findById(decoded.id).select('+refreshToken');
     if (!user || user.refreshToken !== rToken) return res.status(401).json({ error: 'Invalid refresh token' });
 
@@ -227,33 +231,34 @@ const firebaseLogin = async (req, res, next) => {
     const { idToken, name, role, clinic } = req.body;
     if (!idToken) return res.status(400).json({ error: 'Firebase ID Token is required' });
 
+    // Strictly validate every token through firebase-admin — no dev bypass allowed
     let decodedToken;
-    if (process.env.NODE_ENV === 'development' && idToken.startsWith('mock_token_')) {
-      const email = idToken.replace('mock_token_', '').trim().toLowerCase();
-      decodedToken = { email, uid: `mock_uid_${email.split('@')[0]}`, name: name || email.split('@')[0] };
-      console.log(`Dev mock Firebase login bypass active for: ${email}`);
-    } else {
-      try {
-        decodedToken = await getAuth().verifyIdToken(idToken);
-      } catch (verifyErr) {
-        return res.status(401).json({ error: 'Invalid Firebase ID Token: ' + verifyErr.message });
-      }
+    try {
+      decodedToken = await getAuth().verifyIdToken(idToken);
+    } catch (verifyErr) {
+      return res.status(401).json({ error: 'Unauthorized: Invalid Firebase ID Token.' });
     }
 
-    const { email, uid } = decodedToken;
+    const { email, uid, email_verified: firebaseEmailVerified } = decodedToken;
     let user = await User.findOne({ email });
     let isNew = false;
 
     if (!user) {
+      // Mass-assignment guard: only whitelisted fields allowed
+      const allowedRoles = ['parent', 'doctor', 'therapist'];
       user = await User.create({
-        name: name || decodedToken.name || email.split('@')[0],
+        name: (name || decodedToken.name || email.split('@')[0]).trim(),
         email,
         password: `fb_${uid.slice(0, 10)}`,
-        role: role || 'parent',
-        clinic,
+        role: allowedRoles.includes(role) ? role : 'parent',
+        clinic: clinic || undefined,
         isActive: true,
+        isVerified: firebaseEmailVerified === true,
       });
       isNew = true;
+    } else if (firebaseEmailVerified === true && !user.isVerified) {
+      // Sync verification status for returning users who clicked the link
+      user.isVerified = true;
     }
 
     try {
@@ -340,6 +345,74 @@ const handleForgotPasswordRequest = async (req, res, next) => {
   }
 };
 
+// ─── @route GET /api/auth/verify-email ───────────────────────────────────────
+// Firebase redirects here after the user clicks the email-verification link.
+// We sync isVerified → true and redirect the browser to the login page.
+
+const verifyEmailCallback = async (req, res, next) => {
+  try {
+    const { email } = req.query;
+    if (!email) return res.status(400).json({ error: 'Email query parameter is required.' });
+
+    // Confirm with Firebase that the account is now verified
+    let firebaseUser;
+    try {
+      firebaseUser = await getAuth().getUserByEmail(email);
+    } catch {
+      return res.status(404).json({ error: 'Firebase account not found for this email.' });
+    }
+
+    if (!firebaseUser.emailVerified) {
+      return res.status(400).json({ error: 'Email has not been verified yet. Please click the link in your inbox.' });
+    }
+
+    // Stamp local DB record
+    await User.findOneAndUpdate(
+      { email: email.toLowerCase().trim() },
+      { isVerified: true },
+    );
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://auti-care-frontend.vercel.app/app/login';
+    return res.redirect(`${frontendUrl}?verified=true`);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── @route POST /api/auth/sync-verification-status ──────────────────────────
+// Called by the unverified overlay / VerifyEmailScreen "I Have Verified" button.
+// Requires the protect middleware so only authenticated (but unverified) users
+// can reach it. Checks Firebase, stamps the DB, returns a fresh user snapshot.
+
+const syncVerificationStatus = async (req, res, next) => {
+  try {
+    const user = req.user; // injected by protect — token is valid but isVerified may be false
+
+    // Re-confirm with Firebase
+    let firebaseUser;
+    try {
+      firebaseUser = await getAuth().getUserByEmail(user.email);
+    } catch {
+      return res.status(404).json({ error: 'Firebase account not found.' });
+    }
+
+    if (!firebaseUser.emailVerified) {
+      return res.status(200).json({ verified: false });
+    }
+
+    // Stamp the DB if not already done
+    if (!user.isVerified) {
+      await User.findByIdAndUpdate(user._id, { isVerified: true });
+    }
+
+    // Return a fresh user snapshot so clients can update local state
+    const refreshed = await User.findById(user._id).select('-password -refreshToken');
+    return res.status(200).json({ verified: true, user: refreshed });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -351,4 +424,6 @@ module.exports = {
   firebaseLogin,
   checkEmail,
   handleForgotPasswordRequest,
+  verifyEmailCallback,
+  syncVerificationStatus,
 };

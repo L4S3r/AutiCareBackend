@@ -50,6 +50,12 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  isVerified: {
+    type: Boolean,
+    default: false,
+    required: true,
+    index: true,   // rapid-lookup for auth gates
+  },
   lastLogin: {
     type: Date,
   },
