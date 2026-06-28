@@ -27,17 +27,17 @@ const registerSchema = Joi.object({
                     .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])/)
                     .required()
                     .messages({ 'string.pattern.base': 'Password must contain uppercase, lowercase, digit, and special character.' }),
-  phone:          Joi.string().trim().max(20).optional().allow(''),
+  phone:          Joi.string().trim().max(20).optional().allow('', null),
   role:           Joi.string().valid(...ALLOWED_ROLES).default('parent'),
-  clinic:         Joi.string().trim().max(120).optional().allow(''),
+  clinic:         Joi.string().trim().max(120).optional().allow('', null),
 
   // Optional child bootstrap fields
-  childName:      Joi.string().trim().max(100).optional().allow(''),
-  childAge:       Joi.number().integer().min(1).max(18).optional(),
-  childGender:    Joi.string().valid(...ALLOWED_GENDER).optional(),
-  diagnosisLevel: Joi.string().valid(...ALLOWED_ASD).optional(),
-  childUsername:  Joi.string().trim().lowercase().max(50).optional().allow(''),
-  childPassword:  Joi.string().min(6).max(128).optional().allow(''),
+  childName:      Joi.string().trim().max(100).optional().allow('', null),
+  childAge:       Joi.number().integer().min(1).max(18).optional().allow(null),
+  childGender:    Joi.string().valid(...ALLOWED_GENDER).optional().allow(null),
+  diagnosisLevel: Joi.string().valid(...ALLOWED_ASD).optional().allow(null),
+  childUsername:  Joi.string().trim().lowercase().max(50).optional().allow('', null),
+  childPassword:  Joi.string().min(6).max(128).optional().allow('', null),
 });
 
 /**
@@ -45,16 +45,16 @@ const registerSchema = Joi.object({
  */
 const firebaseLoginSchema = Joi.object({
   idToken:        Joi.string().min(10).required(),
-  name:           Joi.string().trim().max(100).optional().allow(''),
+  name:           Joi.string().trim().max(100).optional().allow('', null),
   role:           Joi.string().valid(...ALLOWED_ROLES).default('parent'),
-  clinic:         Joi.string().trim().max(120).optional().allow(''),
+  clinic:         Joi.string().trim().max(120).optional().allow('', null),
 
-  childName:      Joi.string().trim().max(100).optional().allow(''),
-  childAge:       Joi.number().integer().min(1).max(18).optional(),
-  childGender:    Joi.string().valid(...ALLOWED_GENDER).optional(),
-  diagnosisLevel: Joi.string().valid(...ALLOWED_ASD).optional(),
-  childUsername:  Joi.string().trim().lowercase().max(50).optional().allow(''),
-  childPassword:  Joi.string().min(6).max(128).optional().allow(''),
+  childName:      Joi.string().trim().max(100).optional().allow('', null),
+  childAge:       Joi.number().integer().min(1).max(18).optional().allow(null),
+  childGender:    Joi.string().valid(...ALLOWED_GENDER).optional().allow(null),
+  diagnosisLevel: Joi.string().valid(...ALLOWED_ASD).optional().allow(null),
+  childUsername:  Joi.string().trim().lowercase().max(50).optional().allow('', null),
+  childPassword:  Joi.string().min(6).max(128).optional().allow('', null),
 });
 
 /**
