@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const childProfileSchema = new mongoose.Schema({
   name: {
@@ -78,5 +79,18 @@ childProfileSchema.virtual('calculatedAge').get(function() {
   if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
   return age;
 });
+
+// Hash password before saving
+childProfileSchema.pre('save', async function (next) {
+  if (!this.password || !this.isModified('password')) return next();
+  this.password = await bcrypt.hash(this.password, 12);
+  next();
+});
+
+// Compare password
+childProfileSchema.methods.comparePassword = async function (candidatePassword) {
+  if (!this.password) return false;
+  return bcrypt.compare(candidatePassword, this.password);
+};
 
 module.exports = mongoose.model('ChildProfile', childProfileSchema);
