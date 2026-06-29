@@ -165,6 +165,12 @@ AutiCareBackend/
 | `PATCH` | `/api/patients/:id/avatar` | ✅ Parent/Admin | Update/clear child profile avatar |
 | `POST` | `/api/patients/:id/birth-certificate` | ✅ Parent/Admin | Upload child birth certificate scan |
 
+### Contact & Support
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `POST` | `/api/contact` | ❌ | Submit contact/help inquiry securely (saves to DB and notifies SMTP) |
+
 ### Behavioral Logs
 
 | Method | Endpoint | Auth | Description |
@@ -243,10 +249,12 @@ MONGODB_URI=mongodb+srv://<user>:<password>@cluster.mongodb.net/auticare
 JWT_SECRET=
 JWT_EXPIRES_IN=7d
 
-# Password Reset
+# Password Reset / SMTP
 EMAIL_SERVICE=
 EMAIL_USER=
 EMAIL_PASS=
+FROM_EMAIL=
+COMPANY_EMAIL=                  # Optional company email address to receive contact form submissions
 RESET_PASSWORD_URL=https://auti-care-frontend.vercel.app/reset-password
 
 # AI Microservice
