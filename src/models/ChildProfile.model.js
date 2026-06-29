@@ -59,6 +59,10 @@ const childProfileSchema = new mongoose.Schema({
   avatar: {
     type: String,
   },
+  fcmToken: {
+    type: String,
+    default: null
+  },
   isActive: {
     type: Boolean,
     default: true,

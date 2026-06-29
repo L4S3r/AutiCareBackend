@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User.model');
+const ChildProfile = require('../models/ChildProfile.model');
 const { AppError } = require('./error.middleware');
 
 // ─── Boot-time Cryptographic Key Guard ────────────────────────────────────────
@@ -24,7 +25,14 @@ const protect = async (req, res, next) => {
 
     // JWT_SECRET is guaranteed non-empty by the boot guard above
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password -refreshToken');
+    let user = await User.findById(decoded.id).select('-password -refreshToken');
+    let isChild = false;
+    if (!user) {
+      user = await ChildProfile.findById(decoded.id);
+      if (user) {
+        isChild = true;
+      }
+    }
     if (!user) return res.status(401).json({ error: 'User not found.' });
     if (!user.isActive) {
       return res.status(403).json({
@@ -38,14 +46,20 @@ const protect = async (req, res, next) => {
     // pre-verified and will have isVerified === true already.
     // The /sync-verification-status route sets bypassVerificationGate = true
     // so that unverified users can call it to unlock their account.
-    if (!user.isVerified && !req.bypassVerificationGate) {
+    if (!isChild && !user.isVerified && !req.bypassVerificationGate) {
       return res.status(403).json({
         error: 'Email not verified. Please check your inbox and click the verification link before accessing the dashboard.',
         code: 'EMAIL_NOT_VERIFIED',
       });
     }
 
-    req.user = user;
+    if (isChild) {
+      const userObj = user.toObject({ virtuals: true });
+      userObj.role = 'Child';
+      req.user = userObj;
+    } else {
+      req.user = user;
+    }
     next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') return res.status(401).json({ error: 'Token expired.' });
