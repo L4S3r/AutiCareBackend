@@ -198,5 +198,45 @@ const sendMeltdownAlertEmail = async (parentEmail, parentName, childName, score,
   });
 };
 
+const sendContactSubmissionEmail = async (submission) => {
+  const companyEmail = process.env.COMPANY_EMAIL || 'support@auticare.ai';
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>New Contact Form Submission</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; color: #333333; line-height: 1.6; padding: 20px;">
+      <div style="max-width: 600px; margin: 0 auto; border: 1px solid #dddddd; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+        <div style="background-color: #3b82f6; color: #ffffff; padding: 20px; text-align: center;">
+          <h2 style="margin: 0;">New Contact Form Submission</h2>
+        </div>
+        <div style="padding: 24px;">
+          <p><strong>Name:</strong> ${submission.name}</p>
+          <p><strong>Email:</strong> ${submission.email}</p>
+          <p><strong>Phone:</strong> ${submission.phone || 'N/A'}</p>
+          <p><strong>Date:</strong> ${submission.createdAt.toLocaleString()}</p>
+          <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 20px 0;" />
+          <p><strong>Message:</strong></p>
+          <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 16px; white-space: pre-wrap;">${submission.message}</div>
+        </div>
+        <div style="background-color: #f3f4f6; color: #6b7280; padding: 12px; text-align: center; font-size: 12px;">
+          This message was securely transmitted and saved in AutiCare backend.
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
 
-module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendChildCredentialsEmail, sendMeltdownAlertEmail, };
+  return transporter.sendMail({
+    from: `"AutiCare Contact Form" <${FROM_ENV}>`,
+    to: companyEmail,
+    replyTo: submission.email,
+    subject: `📩 New Support Inquiry from ${submission.name}`,
+    html: htmlContent,
+  });
+};
+
+
+module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendChildCredentialsEmail, sendMeltdownAlertEmail, sendContactSubmissionEmail, };

@@ -16,6 +16,7 @@ const aiRoutes = require('./routes/ai.routes');
 const adminRoutes = require('./routes/admin.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const noteRoutes = require('./routes/note.routes');
+const contactRoutes = require('./routes/contact.routes');
 
 const { errorHandler } = require('./middleware/error.middleware');
 const { auditLogger } = require('./middleware/audit.middleware');
@@ -105,6 +106,7 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/notes', noteRoutes);
+app.use('/api/contact', contactRoutes);
 
 
 // 404

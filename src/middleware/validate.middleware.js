@@ -120,6 +120,13 @@ const uploadReportSchema = Joi.object({
     .optional(),
 });
 
+const contactSchema = Joi.object({
+  name: Joi.string().trim().min(2).max(100).required(),
+  email: Joi.string().email().lowercase().trim().required(),
+  phone: Joi.string().trim().max(20).optional().allow('', null),
+  message: Joi.string().min(5).max(5000).required(),
+});
+
 // ─── Middleware factory ───────────────────────────────────────────────────────
 
 /**
@@ -151,5 +158,6 @@ module.exports = {
     createPatientSchema,
     updatePatientSchema,
     uploadReportSchema,
+    contactSchema,
   },
 };
