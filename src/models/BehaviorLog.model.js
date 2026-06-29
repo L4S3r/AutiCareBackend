@@ -29,7 +29,6 @@ const behaviorLogSchema = new mongoose.Schema({
   aiAlerts: [String],
 }, { timestamps: true });
 
-// Index for efficient querying
 behaviorLogSchema.index({ childId: 1, date: -1 });
 
 module.exports = mongoose.model('BehaviorLog', behaviorLogSchema);

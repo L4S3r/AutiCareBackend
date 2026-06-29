@@ -27,7 +27,7 @@ const getMimeFromBuffer = (buf) => {
 // @route POST /api/genetic/upload
 const uploadReport = async (req, res, next) => {
   try {
-    const { childId, manualMarkers, notes } = req.body;
+    const { childId, manualMarkers, notes, laboratory } = req.body;
     const uploadedBy = req.user._id;
 
     if (!childId) {
@@ -50,7 +50,8 @@ const uploadReport = async (req, res, next) => {
       notes,
       uploadedBy,
       ocrStatus: req.file ? 'processing' : 'completed',
-      isProcessed: !req.file
+      isProcessed: !req.file,
+      laboratory: laboratory || 'Unknown'
     });
 
     // ─── Case A: Manual Multi-Marker Input Override ───

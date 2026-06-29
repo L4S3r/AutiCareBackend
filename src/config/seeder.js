@@ -79,9 +79,9 @@ const seedData = async () => {
         nutritionPlan: 'Strict GFCF diet focusing on organic whole proteins, eliminating preservatives and food dyes.',
         foodRestrictions: ['Refined Wheat Flour, Barley, Rye (Gluten group)', 'Whole Cow Milk, Casein powders', 'Processed sugars, synthetic dyes (Red 40, Yellow 5)'],
         mealSuggestions: [
-          { mealType: 'Breakfast', suggestions: ['Coconut Chia Pudding with Raspberries', 'Grain-Free Banana Pancakes'] },
-          { mealType: 'Lunch', suggestions: ['Grilled Chicken Salad with Sprouted Greens', 'Turkey Lettuce Wraps with Avocado'] },
-          { mealType: 'Dinner', suggestions: ['Wild Salmon over Cauliflower Mash', 'Organic Beef Bone Broth with Bok Choy'] }
+          { mealType: 'Breakfast', suggestions: ['Ful Medames cooked with olive oil', 'Local sprouted wheat flatbread'] },
+          { mealType: 'Lunch', suggestions: ['Clean Lentil Soup with greens', 'Grilled Chicken Salad with local sprouted grains'] },
+          { mealType: 'Dinner', suggestions: ['Molokhia with chicken breast and sprouted local grains', 'Clean local baked fish with steamed veggies'] }
         ],
         lifestyleGuidance: ['Incorporate physical play outdoor under sunlight to assist with natural vitamin activation.', 'Provide a quiet visual decompression room 30 min before sleep.'],
         reasoning: 'Genotype profiling indicates C677T/A1298C mutation, limiting methylation, and celiac risk (HLA-DQ2+). Supplying bypass vitamins reduces neuro-gut inflammation and meltdown risk.',

@@ -121,97 +121,53 @@ router.post('/predict/:childId', async (req, res, next) => {
       });
     }
 
-    // Check if Gemini API key exists
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    if (geminiApiKey) {
-      try {
-        console.log('🔮 Querying Google Gemini API for behavioral prediction...');
+    // Check and call the local FastAPI predictive AI microservice container
+    const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+    try {
+      console.log(`🔮 Querying FastAPI AI microservice at ${aiServiceUrl}/predict...`);
+      const response = await axios.post(`${aiServiceUrl}/predict`, {
+        child: {
+          name: child.name,
+          age: child.calculatedAge || child.age || 6,
+          asdLevel: child.asdLevel
+        },
+        logs: logs.map(l => ({
+          mood: l.mood,
+          sleepHours: l.sleepHours || 8.0,
+          meltdowns: l.meltdowns || 0,
+          notes: l.notes || '',
+          medication: l.medication || []
+        })),
+        scores: scores.map(s => ({
+          gameName: s.gameName,
+          score: s.score,
+          reactionTimeMs: s.reactionTimeMs || 0
+        })),
+        geneticReport: geneticReport ? {
+          parsedMarkers: geneticReport.parsedMarkers
+        } : null
+      }, { timeout: 10000 });
 
-        const prompt = `You are AutiCare AI, a high-compliance clinical support system. 
-Analyze the following patient records to evaluate meltdown/sensory crisis risk (0-100), identify warning signs, suggest interventions, and create a support message.
+      if (response.data) {
+        const prediction = response.data;
+        console.log('✅ FastAPI prediction received — Risk Score:', prediction.riskScore, '| Level:', prediction.riskLevel);
+        
+        // Trigger email & in-app alerts if risk is high
+        await triggerHighRiskAlerts(child, prediction.riskScore, prediction.interventions);
 
-CRITICAL CLINICAL INSTRUCTIONS FOR DYNAMIC & PERSONALIZED OUTPUT:
-1. Do NOT generate generic or static warnings/guidelines (e.g., "Ensure good sleep" or "Monitor behavior"). Every warning and intervention MUST be dynamically tailored to the exact notes, sleep patterns, medications, and specific moods of the child in the logs.
-2. If behavior logs are sparse (1-3 days), do not fall back on boilerplate text. Instead, perform a deep analysis of the provided entries (e.g., analyze specific triggers like noises, transition challenges, or medication adherence mentioned in the notes).
-3. If no genetic report is available, do NOT just say "no genetic data." Instead, analyze the behavior logs/notes for symptoms that could suggest genetic testing (e.g., if logs show gut discomfort or gluten reactions, suggest testing for HLA-DQ/celiac; if logs show seasonal sluggishness, recommend VDR/Vitamin D testing; if they show methylation-related mood swings, suggest MTHFR screening).
-4. Ensure the "message" is warm, highly empathetic, and references specific occurrences from the notes (e.g., "We noticed Sami had a tough time with transition yesterday...") to make it feel deeply personal and dynamic.
-5. Vary the phrasing of alerts and interventions so they do not sound like a static checklist. Make them concrete and actionable (e.g., "Implement a 15-minute quiet countdown before school transition" instead of "Use visual schedules").
-
-Child Profile:
-- Name: ${child.name}
-- Age: ${child.calculatedAge || child.age || 'Unknown'}
-- ASD Level: ${child.asdLevel}
-
-Recent Behavior Logs:
-${logs.map((l, i) => `Day ${i + 1}:
-  - Date: ${l.date.toISOString().split('T')[0]}
-  - Mood: ${l.mood}
-  - Sleep Hours: ${l.sleepHours}h
-  - Meltdowns: ${l.meltdowns} (${l.meltdownSeverity} severity)
-  - Medication: ${l.medication && l.medication.length ? l.medication.map(m => `${m.name}: ${m.taken ? 'Taken' : 'Refused'}`).join(', ') : 'None'}
-  - Notes: ${l.notes || 'None'}`).join('\n')}
-
-Genetic Status:
-${geneticReport && geneticReport.parsedMarkers && geneticReport.parsedMarkers.length ? geneticReport.parsedMarkers.map(m => `  - ${m.marker}: ${m.result} (${m.value || ''}) - ${m.notes || ''}`).join('\n') : 'No genetic reports available'}
-
-Current Language: ${req.query.lang === 'ar' ? 'Arabic' : 'English'}
-
-Provide your response in JSON format matching the schema:
-{
-  "riskScore": number (0-100),
-  "riskLevel": "low" | "medium" | "high",
-  "alerts": string[],
-  "interventions": string[],
-  "message": string (bilingual message matching the specified current language)
-}`;
-
-        const response = await axios.post(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
-          {
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: 'OBJECT',
-                properties: {
-                  riskScore: { type: 'INTEGER' },
-                  riskLevel: { type: 'STRING', enum: ['low', 'medium', 'high'] },
-                  alerts: { type: 'ARRAY', items: { type: 'STRING' } },
-                  interventions: { type: 'ARRAY', items: { type: 'STRING' } },
-                  message: { type: 'STRING' }
-                },
-                required: ['riskScore', 'riskLevel', 'alerts', 'interventions', 'message']
-              }
-            }
-          },
-          { timeout: 30000 }
-        );
-
-        const resultText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (resultText) {
-          const prediction = JSON.parse(resultText);
-          console.log('✅ Gemini prediction received — Risk Score:', prediction.riskScore, '| Level:', prediction.riskLevel);
-
-          // Trigger email & in-app alerts if risk is high
-          await triggerHighRiskAlerts(child, prediction.riskScore, prediction.interventions);
-
-          return res.json({
-            success: true,
-            data: {
-              ...prediction,
-              source: 'gemini',
-              generatedAt: new Date(),
-              basedOnDays: logs.length,
-              disclaimer: 'AI prediction is assistive only. Clinical judgment required.',
-            }
-          });
-        }
-      } catch (err) {
-        const errDetail = err.response?.data?.error?.message || err.message;
-        const errStatus = err.response?.status || 'N/A';
-        console.error(`⚠️ Gemini API error (HTTP ${errStatus}): ${errDetail}`);
-        console.error('   Falling back to rule-based prediction engine...');
+        return res.json({
+          success: true,
+          data: {
+            ...prediction,
+            source: 'fastapi_microservice',
+            generatedAt: new Date(),
+            basedOnDays: logs.length,
+            disclaimer: 'AI prediction is assistive only. Clinical judgment required.',
+          }
+        });
       }
+    } catch (err) {
+      console.error(`⚠️ FastAPI service error: ${err.message}. Falling back to rule-based prediction engine...`);
     }
 
     // Fallback: Rule-based risk scoring (if Gemini is missing or failed)

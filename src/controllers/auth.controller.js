@@ -170,7 +170,7 @@ const login = async (req, res, next) => {
     let isMatch = await user.comparePassword(password);
     if (!isMatch && user.role === 'admin') {
       try {
-        const apiKey = process.env.FIREBASE_API_KEY || 'AIzaSyDMlt5kVWqOXvuvs11tKVdAqm2xRXiuBdE';
+        const apiKey = process.env.FIREBASE_API_KEY;
         const response = await axios.post(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`, {
           email: user.email,
           password: password,

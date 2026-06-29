@@ -153,6 +153,7 @@ const getPlan = async (req, res, next) => {
 };
 
 // Local fallback rule engine
+// Local fallback rule engine
 const localRuleEngine = (markers) => {
   const supplements = [];
   const foodRestrictions = [];
@@ -167,41 +168,65 @@ const localRuleEngine = (markers) => {
   };
 
   markers.forEach(m => {
-    const marker = m.marker?.toUpperCase();
-    const result = m.result;
-    if (!marker || result === 'negative') return;
+    const marker = m.marker?.toUpperCase() || '';
+    const result = m.result?.toLowerCase() || '';
+    const value = m.value?.toUpperCase() || '';
+    
+    if (!marker || result === 'negative' || result === 'normal') return;
     markersAnalyzed.push(marker);
 
+    // 1 & 2. MTHFR (C677T / A1298C)
     if (marker.includes('MTHFR')) {
-      supplements.push({ name: 'Methyl Folate (5-MTHF)', dosage: '400-800mcg', frequency: 'Daily', notes: 'Active form bypasses MTHFR mutation' });
-      supplements.push({ name: 'Methylcobalamin (B12)', dosage: '1000mcg', frequency: 'Daily', notes: 'Active B12 form' });
-      foodRestrictions.push('Avoid synthetic folic acid (fortified foods)');
+      if (value.includes('C677T') || marker.includes('C677T')) {
+        supplements.push({ name: 'L-Methylfolate (Metafolin)', dosage: '400mcg', frequency: 'Daily morning', notes: 'Bypasses severe MTHFR C677T methylation block' });
+      } else if (value.includes('A1298C') || marker.includes('A1298C')) {
+        supplements.push({ name: 'L-Methylfolate + Methyl-B12', dosage: '400mcg / 500mcg', frequency: 'Daily morning', notes: 'Supports milder MTHFR A1298C methylation pathway' });
+      } else {
+        supplements.push({ name: 'Methyl Folate (5-MTHF)', dosage: '400mcg', frequency: 'Daily', notes: 'Active form bypasses MTHFR mutation' });
+      }
+      supplements.push({ name: 'Methylcobalamin (B12)', dosage: '1000mcg', frequency: 'Daily', notes: 'Active B12 form supports MTHFR cofactors' });
+      foodRestrictions.push('Avoid synthetic folic acid (fortified wheat/cereals)');
       lifestyleGuidance.push('Monitor homocysteine levels every 6 months');
       guidelines.push('Requires folate-dense green vegetables and methylated B-vitamin cofactors to bypass the MTHFR block.');
       
       mealMap.Breakfast.add('Spinach and pasture-raised egg scramble');
-      mealMap.Lunch.add('Romaine chicken lettuce wraps with avocado');
-      mealMap.Dinner.add('Pan-seared salmon with steamed broccoli and asparagus');
+      mealMap.Lunch.add('Clean Lentil Soup with local sprouted wheat flatbread');
+      mealMap.Dinner.add('Grilled chicken breast with Molokhia and sprouted local grains');
     }
-    if (marker === 'VDR') {
-      supplements.push({ name: 'Vitamin D3 + K2', dosage: '2000-4000 IU', frequency: 'Daily with fat', notes: 'Monitor serum 25-OH-D levels' });
+    
+    // 3, 4 & 5. VDR (Taq1 / Bsm1 / Fok1)
+    if (marker.includes('VDR')) {
+      if (value.includes('TAQ') || marker.includes('TAQ')) {
+        supplements.push({ name: 'Vitamin D3 + K2 (High Dose)', dosage: '4000 IU', frequency: 'Daily with fat', notes: 'Compensates for sluggish VDR Taq1 receptor expression' });
+      } else if (value.includes('BSM') || marker.includes('BSM')) {
+        supplements.push({ name: 'Vitamin D3 + K2', dosage: '2000 IU', frequency: 'Daily', notes: 'Supports VDR Bsm1 receptor expression' });
+      } else if (value.includes('FOK') || marker.includes('FOK')) {
+        supplements.push({ name: 'Vitamin D3 + K2 (Sublingual)', dosage: '3000 IU', frequency: 'Daily', notes: 'Optimized sublingual absorption for VDR Fok1' });
+      } else {
+        supplements.push({ name: 'Vitamin D3 + K2', dosage: '2000-4000 IU', frequency: 'Daily with fat', notes: 'Monitor serum 25-OH-D levels' });
+      }
       lifestyleGuidance.push('20–30 minutes of safe sun exposure daily');
       guidelines.push('Requires high calcium and Vitamin D absorption optimization to support VDR expression.');
       
-      mealMap.Breakfast.add('Mushroom and pasture-raised egg omelet');
-      mealMap.Lunch.add('Wild-caught sockeye salmon salad');
-      mealMap.Dinner.add('Sardines cooked in olive oil with sweet potato mash');
+      mealMap.Breakfast.add('Ful Medames cooked with pure olive oil');
+      mealMap.Lunch.add('Mushroom and pasture-raised egg omelet');
+      mealMap.Dinner.add('Clean local baked fish cooked in olive oil with sweet potato mash');
     }
-    if (marker === 'COMT') {
-      foodRestrictions.push('Low tyramine diet (aged cheeses, fermented foods)');
-      supplements.push({ name: 'Magnesium Glycinate', dosage: '200mg', frequency: 'Daily evening', notes: 'Supports COMT pathway' });
+    
+    // 6. COMT (Val158Met)
+    if (marker.includes('COMT')) {
+      foodRestrictions.push('Low tyramine diet (aged cheeses, fermented foods, excessive cacao)');
+      supplements.push({ name: 'Magnesium Glycinate', dosage: '200-400mg', frequency: 'Daily evening', notes: 'Supports COMT catecholamine pathway and relaxation' });
+      lifestyleGuidance.push('Implement scheduled sensory decompression windows to prevent high-stress overload');
       guidelines.push('Requires low-catechol and low-tyramine foods to avoid overloading slow COMT clearance.');
       
-      mealMap.Breakfast.add('Coconut flour chia pudding with fresh berries');
+      mealMap.Breakfast.add('Warm clean Lentil Soup with local sprouted wheat flatbread');
       mealMap.Lunch.add('Fresh pasture-raised chicken breast with zucchini ribbons');
       mealMap.Dinner.add('Oven-roasted turkey breast with fresh green beans');
     }
-    if (marker === 'HLA-DQ2' || marker === 'HLA-DQ8') {
+    
+    // 7 & 8. HLA-DQ2 / HLA-DQ8
+    if (marker.includes('HLA-DQ2') || marker.includes('HLA-DQ8') || marker.includes('HLA-DQ')) {
       foodRestrictions.push('Strict gluten-free diet (wheat, barley, rye)');
       lifestyleGuidance.push('Test for celiac disease antibodies');
       guidelines.push('Requires strict gluten elimination due to HLA-DQ2/8 celiac genetic predisposition.');
@@ -210,37 +235,43 @@ const localRuleEngine = (markers) => {
       mealMap.Lunch.add('Brown rice bowl with steamed vegetables and tahini');
       mealMap.Dinner.add('Grilled chicken with roasted butternut squash');
     }
-    if (marker === 'FADS1' || marker === 'FADS2') {
-      supplements.push({ name: 'Omega-3 (EPA/DHA)', dosage: '1000-2000mg', frequency: 'Daily with meals', notes: 'Compensates for reduced FADS conversion' });
+    
+    // 9. FADS1 / FADS2
+    if (marker.includes('FADS')) {
+      supplements.push({ name: 'Omega-3 (EPA/DHA)', dosage: '1000-2000mg', frequency: 'Daily with meals', notes: 'Compensates for reduced FADS conversion of plant ALA' });
       guidelines.push('Requires pre-formed long-chain omega-3 fatty acids (EPA/DHA) due to poor plant ALA conversion.');
       
-      mealMap.Breakfast.add('Smoked salmon slices with sliced cucumber');
-      mealMap.Lunch.add('Sardine and avocado salad');
-      mealMap.Dinner.add('Pan-seared mackerel with steamed broccoli');
+      mealMap.Breakfast.add('Ful Medames cooked with pure olive oil and clean local flatbread');
+      mealMap.Lunch.add('Local white cheese with sliced cucumber and sprouted grains');
+      mealMap.Dinner.add('Clean local baked fish with steamed veggies and herbs');
     }
-    if (marker === 'FUT2') {
-      supplements.push({ name: 'Bifidobacterium Probiotic', dosage: '10-25 billion CFU', frequency: 'Daily', notes: 'FUT2 variants reduce gut microbiome diversity' });
-      guidelines.push('Requires prebiotic-rich foods to feed beneficial gut flora for non-secretor status.');
+    
+    // 10. FUT2
+    if (marker.includes('FUT2') || marker.includes('FUT')) {
+      supplements.push({ name: 'Spore-Based Probiotics (Bifidobacterium)', dosage: '10-25 billion CFU', frequency: 'Daily', notes: 'FUT2 non-secretor status limits gut microbiome diversity' });
+      guidelines.push('Requires prebiotic-rich foods to feed beneficial gut flora for FUT2 non-secretor status.');
       
       mealMap.Breakfast.add('Warm certified gluten-free oatmeal with dandelion greens');
       mealMap.Lunch.add('Steamed asparagus salad with artichoke hearts');
       mealMap.Dinner.add('Baked chicken breast with roasted chicory root blend');
     }
-    if (marker === 'TNF-ALPHA') {
-      lifestyleGuidance.push('Anti-inflammatory diet (Mediterranean pattern)');
-      foodRestrictions.push('Minimize processed foods, refined sugars, trans fats');
+    
+    // 11. TNF-alpha (G308A)
+    if (marker.includes('TNF')) {
+      lifestyleGuidance.push('Anti-inflammatory diet (Mediterranean and local Egyptian pattern)');
+      foodRestrictions.push('Minimize processed foods, refined sugars, and trans fats');
       guidelines.push('Requires antioxidant-rich, anti-inflammatory dietary patterns to suppress TNF-alpha levels.');
       
       mealMap.Breakfast.add('Mixed berry fruit bowl with organic walnuts');
       mealMap.Lunch.add('Turmeric-spiced grilled chicken salad');
-      mealMap.Dinner.add('Baked cod with olive oil and steamed spinach');
+      mealMap.Dinner.add('Baked local fish with olive oil and steamed spinach');
     }
   });
 
   // Safe defaults if list is empty or small
-  if (mealMap.Breakfast.size === 0) mealMap.Breakfast.add('Gluten-free oats with berries');
-  if (mealMap.Lunch.size === 0) mealMap.Lunch.add('Grilled protein with colorful vegetables');
-  if (mealMap.Dinner.size === 0) mealMap.Dinner.add('Fatty fish with sweet potato');
+  if (mealMap.Breakfast.size === 0) mealMap.Breakfast.add('Ful Medames cooked with olive oil');
+  if (mealMap.Lunch.size === 0) mealMap.Lunch.add('Clean Lentil Soup with local sprouted wheat flatbread');
+  if (mealMap.Dinner.size === 0) mealMap.Dinner.add('Molokhia with chicken breast and sprouted local grains');
 
   return {
     supplements,

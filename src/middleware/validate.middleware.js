@@ -114,6 +114,7 @@ const updatePatientSchema = Joi.object({
 const uploadReportSchema = Joi.object({
   childId: Joi.string().hex().length(24).required(),
   notes: Joi.string().trim().max(2000).optional().allow(''),
+  laboratory: Joi.string().valid('Al-Borg', 'Alfa', 'GASC', 'Unknown').optional().default('Unknown'),
   manualMarkers: Joi.alternatives()
     .try(Joi.array(), Joi.string())
     .optional(),

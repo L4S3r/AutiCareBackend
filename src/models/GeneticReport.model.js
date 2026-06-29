@@ -11,6 +11,7 @@ const geneticReportSchema = new mongoose.Schema({
   childId: { type: mongoose.Schema.Types.ObjectId, ref: 'ChildProfile', required: true },
   reportFileUrl: { type: String },
   reportFileName: { type: String },
+  laboratory: { type: String, enum: ['Al-Borg', 'Alfa', 'GASC', 'Unknown'], default: 'Unknown' },
   parsedMarkers: [geneticMarkerSchema],
   rawText: { type: String },
   ocrStatus: { type: String, enum: ['pending', 'processing', 'completed', 'failed'], default: 'pending' },
