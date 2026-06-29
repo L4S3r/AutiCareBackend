@@ -44,4 +44,48 @@ router.put('/fcm-token', async (req, res, next) => {
   }
 });
 
+const { upload, validateFileMagicBytes } = require('../middleware/file.middleware');
+const { uploadStream } = require('../services/storage.service');
+
+router.patch('/profile/avatar', upload.single('avatar'), validateFileMagicBytes, async (req, res, next) => {
+  try {
+    let avatarUrl = null;
+
+    if (req.file) {
+      const uploadRes = await uploadStream(req.file.buffer, {
+        folder: 'auticare/avatars',
+        resource_type: 'image',
+      });
+      avatarUrl = uploadRes.secure_url;
+    } else if (req.body.clear === 'true' || req.body.clear === true) {
+      avatarUrl = null;
+    } else {
+      return res.status(400).json({ error: 'No file uploaded or clear parameter specified.' });
+    }
+
+    let updatedProfile;
+    if (req.user.role === 'Child') {
+      updatedProfile = await ChildProfile.findByIdAndUpdate(
+        req.user._id,
+        { avatar: avatarUrl },
+        { new: true }
+      );
+    } else {
+      updatedProfile = await User.findByIdAndUpdate(
+        req.user._id,
+        { avatar: avatarUrl },
+        { new: true }
+      );
+    }
+
+    res.json({
+      success: true,
+      data: updatedProfile,
+      message: avatarUrl ? 'Profile avatar updated successfully.' : 'Profile avatar cleared successfully.'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

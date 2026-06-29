@@ -156,6 +156,14 @@ AutiCareBackend/
 | `PATCH` | `/api/admin/users/:id/role` | ✅ Admin | Update user role |
 | `DELETE` | `/api/admin/users/:id` | ✅ Admin | Delete user |
 | `PATCH` | `/api/users/profile` | ✅ | Update own profile |
+| `PATCH` | `/api/users/profile/avatar` | ✅ | Update/clear personal profile photo |
+
+### Child Profiles & Documents
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `PATCH` | `/api/patients/:id/avatar` | ✅ Parent/Admin | Update/clear child profile avatar |
+| `POST` | `/api/patients/:id/birth-certificate` | ✅ Parent/Admin | Upload child birth certificate scan |
 
 ### Behavioral Logs
 
@@ -195,9 +203,9 @@ cd AutiCareBackend
 npm install
 
 # Install Python dependencies (AI microservice)
-cd ai-microservice
+cd ../ai_microservice
 pip install -r requirements.txt
-cd ..
+cd ../AutiCareBackend
 
 # Copy env template
 cp .env.example .env
@@ -211,7 +219,7 @@ cp .env.example .env
 npm run dev
 
 # In a separate terminal, start the FastAPI microservice
-cd ai-microservice
+cd ../ai_microservice
 uvicorn main:app --reload --port 8000
 ```
 
@@ -245,6 +253,11 @@ RESET_PASSWORD_URL=https://auti-care-frontend.vercel.app/reset-password
 AI_SERVICE_URL=http://localhost:8000
 GEMINI_API_KEY=
 
+# Cloudinary Storage
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+
 # CORS
 ALLOWED_ORIGINS=https://auti-care-frontend.vercel.app,http://localhost:3000
 ```
@@ -261,6 +274,7 @@ ALLOWED_ORIGINS=https://auti-care-frontend.vercel.app,http://localhost:3000
 | Rate limiting | `express-rate-limit` on auth endpoints to prevent brute force |
 | CORS | Explicit allowlist — only known origins accepted |
 | Secrets | All secrets in environment variables — none in version control |
+| File Security | Magic bytes signature validation checking MIME headers of all uploaded files (PNG, JPEG, GIF, WebP, PDF) |
 | API docs | Swagger disabled in production — accessible in dev only |
 | Trust proxy | Configured for Vercel's proxy layer (required for rate limiter accuracy) |
 

@@ -3,8 +3,9 @@ const router = express.Router();
 const { register, login, refreshToken, getMe, logout, firebaseLogin, checkEmail, handleForgotPasswordRequest, verifyEmailCallback, syncVerificationStatus } = require('../controllers/auth.controller');
 const { protect } = require('../middleware/auth.middleware');
 const { validate, schemas } = require('../middleware/validate.middleware');
+const { upload, validateFileMagicBytes } = require('../middleware/file.middleware');
 
-router.post('/register',        validate(schemas.registerSchema),      register);
+router.post('/register',        upload.fields([{ name: 'avatar', maxCount: 1 }, { name: 'birthCertificate', maxCount: 1 }]), validateFileMagicBytes, validate(schemas.registerSchema),      register);
 router.post('/login',           login);
 router.post('/firebase-login',  validate(schemas.firebaseLoginSchema), firebaseLogin);
 router.post('/check-email',     checkEmail);

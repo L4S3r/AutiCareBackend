@@ -3,6 +3,7 @@ const BehaviorLog = require('../models/BehaviorLog.model');
 const NutritionPlan = require('../models/NutritionPlan.model');
 const GeneticReport = require('../models/GeneticReport.model');
 const GameScore = require('../models/GameScore.model');
+const { uploadStream } = require('../services/storage.service');
 
 // @route GET /api/patients
 const getPatients = async (req, res, next) => {
@@ -134,4 +135,66 @@ const getPatientSummary = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getPatients, createPatient, getPatient, updatePatient, getPatientSummary };
+const updateAvatar = async (req, res, next) => {
+  try {
+    const patient = await ChildProfile.findById(req.params.id);
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+    if (req.user.role === 'parent' && patient.parentId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Access Denied: You are not authorized for this patient profile.' });
+    }
+
+    let avatarUrl = null;
+    if (req.file) {
+      const uploadRes = await uploadStream(req.file.buffer, {
+        folder: 'auticare/avatars',
+        resource_type: 'image',
+      });
+      avatarUrl = uploadRes.secure_url;
+    } else if (req.body.clear === 'true' || req.body.clear === true) {
+      avatarUrl = null;
+    } else {
+      return res.status(400).json({ error: 'No file uploaded or clear parameter specified.' });
+    }
+
+    patient.avatar = avatarUrl;
+    await patient.save();
+
+    res.json({
+      success: true,
+      data: patient,
+      message: avatarUrl ? 'Patient avatar updated successfully.' : 'Patient avatar cleared successfully.'
+    });
+  } catch (err) { next(err); }
+};
+
+const uploadBirthCertificate = async (req, res, next) => {
+  try {
+    const patient = await ChildProfile.findById(req.params.id);
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+    if (req.user.role === 'parent' && patient.parentId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Access Denied: You are not authorized for this patient profile.' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'Please upload a birth certificate file.' });
+    }
+
+    const uploadRes = await uploadStream(req.file.buffer, {
+      folder: 'auticare/birth_certificates',
+      resource_type: 'auto',
+    });
+
+    patient.birthCertificateUrl = uploadRes.secure_url;
+    await patient.save();
+
+    res.status(200).json({
+      success: true,
+      data: patient,
+      message: 'Birth certificate uploaded successfully.'
+    });
+  } catch (err) { next(err); }
+};
+
+module.exports = { getPatients, createPatient, getPatient, updatePatient, getPatientSummary, updateAvatar, uploadBirthCertificate };

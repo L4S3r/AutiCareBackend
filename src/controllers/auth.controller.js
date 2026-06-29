@@ -7,15 +7,16 @@ require('../config/firebase');
 const { getAuth } = require('firebase-admin/auth');
 const { generateToken, generateRefreshToken } = require('../middleware/auth.middleware');
 const { sendWelcomeEmail, sendPasswordResetEmail, sendChildCredentialsEmail } = require('../services/email.service');
+const { uploadStream } = require('../services/storage.service');
 
 const normalizeAsdLevel = (level) => (level || 'level1').replace(/\s+/g, '').toLowerCase();
 const normalizeGender = (gender) => (gender || 'male').toLowerCase();
 
 // ─── Helper: Create child profile for parent ──────────────────────────────────
-
 const maybeCreateParentChild = async ({
   user, childName, childAge, childGender,
   diagnosisLevel, childUsername, childPassword,
+  avatar, birthCertificateUrl,
   skipEmail = false,
 }) => {
   if (user.role !== 'parent' || !childName) return;
@@ -31,6 +32,8 @@ const maybeCreateParentChild = async ({
     gender: normalizeGender(childGender),
     asdLevel: normalizeAsdLevel(diagnosisLevel),
     parentId: user._id,
+    avatar,
+    birthCertificateUrl,
   });
 
   if (!skipEmail && childUsername && childPassword) {
@@ -98,6 +101,38 @@ const register = async (req, res, next) => {
     const allowedRoles = ['parent', 'doctor', 'therapist'];
     const resolvedRole = allowedRoles.includes(role) ? role : 'parent';
 
+    let avatarUrl = undefined;
+    let birthCertificateUrl = undefined;
+
+    if (req.files) {
+      const avatarFile = req.files['avatar']?.[0];
+      const bcFile = req.files['birthCertificate']?.[0];
+
+      if (avatarFile) {
+        try {
+          const uploadRes = await uploadStream(avatarFile.buffer, {
+            folder: 'auticare/avatars',
+            resource_type: 'image',
+          });
+          avatarUrl = uploadRes.secure_url;
+        } catch (uploadErr) {
+          console.error('Failed to upload avatar:', uploadErr.message);
+        }
+      }
+
+      if (bcFile) {
+        try {
+          const uploadRes = await uploadStream(bcFile.buffer, {
+            folder: 'auticare/birth_certificates',
+            resource_type: 'auto',
+          });
+          birthCertificateUrl = uploadRes.secure_url;
+        } catch (uploadErr) {
+          console.error('Failed to upload birth certificate:', uploadErr.message);
+        }
+      }
+    }
+
     // 1. Validate parent email against User early
     const existing = await User.findOne({ email: emailStr });
     if (existing) {
@@ -138,6 +173,7 @@ const register = async (req, res, next) => {
       phone: phone || undefined,
       role: resolvedRole,
       clinic: clinic || undefined,
+      avatar: resolvedRole !== 'parent' ? avatarUrl : undefined,
     });
 
     // Generate JWT tokens
@@ -157,6 +193,8 @@ const register = async (req, res, next) => {
         diagnosisLevel,
         childUsername,
         childPassword,
+        avatar: avatarUrl,
+        birthCertificateUrl,
         skipEmail: true,
       });
     } catch (childErr) {

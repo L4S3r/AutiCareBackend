@@ -71,6 +71,9 @@ const userSchema = new mongoose.Schema({
   avatar: {
     type: String,
   },
+  birthCertificateUrl: {
+    type: String,
+  },
 }, {
   timestamps: true,
 });
