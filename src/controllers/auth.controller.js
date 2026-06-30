@@ -103,32 +103,35 @@ const register = async (req, res, next) => {
 
     let avatarUrl = undefined;
     let birthCertificateUrl = undefined;
+    let nationalIdFrontUrl = undefined;
+    let nationalIdBackUrl = undefined;
+    let certificatesUrls = [];
 
     if (req.files) {
-      const avatarFile = req.files['avatar']?.[0];
-      const bcFile = req.files['birthCertificate']?.[0];
-
-      if (avatarFile) {
+      const uploadHelper = async (file, folder) => {
+        if (!file) return undefined;
         try {
-          const uploadRes = await uploadStream(avatarFile.buffer, {
-            folder: 'auticare/avatars',
-            resource_type: 'image',
+          const uploadRes = await uploadStream(file.buffer, {
+            folder,
+            resource_type: 'auto'
           });
-          avatarUrl = uploadRes.secure_url;
-        } catch (uploadErr) {
-          console.error('Failed to upload avatar:', uploadErr.message);
+          return uploadRes.secure_url;
+        } catch (err) {
+          console.error(`Failed to upload ${file.fieldname}:`, err.message);
+          return undefined;
         }
-      }
+      };
 
-      if (bcFile) {
-        try {
-          const uploadRes = await uploadStream(bcFile.buffer, {
-            folder: 'auticare/birth_certificates',
-            resource_type: 'auto',
-          });
-          birthCertificateUrl = uploadRes.secure_url;
-        } catch (uploadErr) {
-          console.error('Failed to upload birth certificate:', uploadErr.message);
+      avatarUrl = await uploadHelper(req.files['avatar']?.[0], 'auticare/avatars');
+      birthCertificateUrl = await uploadHelper(req.files['birthCertificate']?.[0], 'auticare/birth_certificates');
+      nationalIdFrontUrl = await uploadHelper(req.files['nationalIdFront']?.[0], 'auticare/verification');
+      nationalIdBackUrl = await uploadHelper(req.files['nationalIdBack']?.[0], 'auticare/verification');
+      
+      const certFiles = req.files['certificates'] || [];
+      for (const file of certFiles) {
+        const url = await uploadHelper(file, 'auticare/verification');
+        if (url) {
+          certificatesUrls.push(url);
         }
       }
     }
@@ -174,6 +177,10 @@ const register = async (req, res, next) => {
       role: resolvedRole,
       clinic: clinic || undefined,
       avatar: resolvedRole !== 'parent' ? avatarUrl : undefined,
+      birthCertificateUrl,
+      nationalIdFront: nationalIdFrontUrl,
+      nationalIdBack: nationalIdBackUrl,
+      certificates: certificatesUrls,
     });
 
     // Generate JWT tokens

@@ -1,9 +1,44 @@
 const mongoose = require('mongoose');
+const User = require('../models/User.model');
 
 // Cache the connection across serverless invocations.
-// Vercel keeps the function container alive for a while after each request,
-// so subsequent requests reuse this connection instead of opening a new one.
 let cachedConn = null;
+
+const cleanupStaleData = async () => {
+  try {
+    console.log('🧹 Running database cleanup for unhashed or stale accounts...');
+    
+    // 1. Delete users matching joker_364 in username, name, or email
+    const deletedStale = await User.deleteMany({
+      $or: [
+        { username: 'joker_364' },
+        { name: 'joker_364' },
+        { email: /joker_364/i }
+      ]
+    });
+    if (deletedStale.deletedCount > 0) {
+      console.log(`🧹 Dropped ${deletedStale.deletedCount} stale joker_364 accounts.`);
+    }
+
+    // 2. Delete users with unhashed/plain text passwords
+    const users = await User.find({}).select('+password');
+    let deletedUnhashedCount = 0;
+    
+    for (const user of users) {
+      const isHashed = user.password && user.password.startsWith('$2') && user.password.length === 60;
+      if (!isHashed) {
+        await User.deleteOne({ _id: user._id });
+        deletedUnhashedCount++;
+      }
+    }
+    
+    if (deletedUnhashedCount > 0) {
+      console.log(`🧹 Dropped ${deletedUnhashedCount} users with unhashed passwords.`);
+    }
+  } catch (err) {
+    console.error('❌ Database cleanup error:', err.message);
+  }
+};
 
 const connectDB = async () => {
   // Reuse existing live connection
@@ -17,7 +52,6 @@ const connectDB = async () => {
   let isMemoryDb = false;
 
   // --- Development / Local ---
-  // Fall back to in-memory DB only when not in production and no Atlas URI supplied
   if (!isProduction && !process.env.MONGO_URI) {
     try {
       console.log('🔄 Attempting connection to local MongoDB...');
@@ -42,7 +76,7 @@ const connectDB = async () => {
     }
   }
 
-  // --- Production / Atlas (or in-memory fallback above) ---
+  // --- Production / Atlas ---
   if (isProduction && !process.env.MONGO_URI) {
     throw new Error(
       '❌ MONGO_URI environment variable is not set. ' +
@@ -56,6 +90,9 @@ const connectDB = async () => {
   // Run seeder after first connection
   const seedData = require('./seeder');
   await seedData();
+
+  // Run database cleanup to drop stale unhashed accounts
+  await cleanupStaleData();
 
   cachedConn = conn;
   return conn;

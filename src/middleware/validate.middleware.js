@@ -1,12 +1,3 @@
-/**
- * validate.middleware.js
- * ──────────────────────
- * Generic Joi schema validation middleware factory.
- * Usage: router.post('/route', validate(schema), controller)
- *
- * Rejects non-conforming bodies with 422 Unprocessable Entity.
- * Never lets malformed or extra fields reach a controller.
- */
 const Joi = require('joi');
 
 // ─── Shared field rules ──────────────────────────────────────────────────────
@@ -30,6 +21,11 @@ const registerSchema = Joi.object({
   phone: Joi.string().trim().max(20).optional().allow('', null),
   role: Joi.string().valid(...ALLOWED_ROLES).default('parent'),
   clinic: Joi.string().trim().max(120).optional().allow('', null),
+
+  // Professional credential parameters (validated optionally, sanitization active)
+  nationalIdFront: Joi.string().optional().allow('', null),
+  nationalIdBack: Joi.string().optional().allow('', null),
+  certificates: Joi.array().items(Joi.string().allow('', null)).optional(),
 
   // Required child bootstrap fields for parent signups
   childName: Joi.string().trim().max(100).when('role', {
@@ -90,7 +86,6 @@ const createPatientSchema = Joi.object({
   gender: Joi.string().valid(...ALLOWED_GENDER).optional(),
   diagnosisDate: Joi.date().iso().optional(),
   asdLevel: Joi.string().valid(...ALLOWED_ASD).default('not_specified'),
-  // Only non-parent callers may set parentId; validated separately in the controller
   parentId: Joi.string().hex().length(24).optional(),
 });
 
@@ -106,7 +101,7 @@ const updatePatientSchema = Joi.object({
   notes: Joi.string().trim().max(2000).optional().allow(''),
   allergies: Joi.array().items(Joi.string().trim().max(100)).max(50).optional(),
   currentMedications: Joi.array().items(Joi.string().trim().max(200)).max(50).optional(),
-}).min(1); // At least one field must be present on an update
+}).min(1);
 
 /**
  * POST /api/genetic/upload  (body fields alongside the multipart file)
@@ -129,14 +124,10 @@ const contactSchema = Joi.object({
 
 // ─── Middleware factory ───────────────────────────────────────────────────────
 
-/**
- * @param {Joi.Schema} schema
- * @param {'body'|'query'|'params'} [source='body']
- */
 const validate = (schema, source = 'body') => (req, res, next) => {
   const { error, value } = schema.validate(req[source], {
-    abortEarly: false,  // collect all errors, not just the first
-    stripUnknown: true,   // silently drop fields not in schema (mass-assignment kill-switch)
+    abortEarly: false,
+    stripUnknown: true,
     convert: true,
   });
 
@@ -145,7 +136,6 @@ const validate = (schema, source = 'body') => (req, res, next) => {
     return res.status(422).json({ error: 'Validation failed.', details: messages });
   }
 
-  // Replace req[source] with the sanitized, schema-validated value
   req[source] = value;
   next();
 };

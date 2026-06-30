@@ -37,6 +37,40 @@ const uploadStream = (fileBuffer, options = {}) => {
   });
 };
 
+/**
+ * Extract public ID from a Cloudinary URL
+ * @param {string} url 
+ * @returns {string|null}
+ */
+const extractPublicId = (url) => {
+  if (!url) return null;
+  const match = url.match(/\/upload\/(?:v\d+\/)?([^.]+)/);
+  if (match && match[1]) {
+    return decodeURIComponent(match[1]);
+  }
+  return null;
+};
+
+/**
+ * Deletes a file from Cloudinary by URL
+ * @param {string} url 
+ * @returns {Promise<Object>}
+ */
+const deleteFile = async (url) => {
+  if (!hasCredentials) return { result: 'ok_mock' };
+  const publicId = extractPublicId(url);
+  if (!publicId) return null;
+
+  return new Promise((resolve, reject) => {
+    const resourceType = url.includes('/raw/') ? 'raw' : 'image';
+    cloudinary.uploader.destroy(publicId, { resource_type: resourceType }, (error, result) => {
+      if (error) return reject(error);
+      resolve(result);
+    });
+  });
+};
+
 module.exports = {
   uploadStream,
+  deleteFile,
 };

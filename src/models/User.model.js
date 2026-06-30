@@ -74,6 +74,37 @@ const userSchema = new mongoose.Schema({
   birthCertificateUrl: {
     type: String,
   },
+  nationalIdUrl: {
+    type: String,
+  },
+  medicalLicenseUrl: {
+    type: String,
+  },
+  cvUrl: {
+    type: String,
+  },
+  nationalIdFrontUrl: {
+    type: String,
+  },
+  nationalIdBackUrl: {
+    type: String,
+  },
+  certificate1Url: {
+    type: String,
+  },
+  certificate2Url: {
+    type: String,
+  },
+  // New string tracking keys for professional credentials
+  nationalIdFront: {
+    type: String,
+  },
+  nationalIdBack: {
+    type: String,
+  },
+  certificates: [{
+    type: String,
+  }],
 }, {
   timestamps: true,
 });
@@ -88,14 +119,6 @@ userSchema.pre('save', async function (next) {
 // Compare password
 userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
-};
-
-// Remove sensitive fields from JSON output
-userSchema.methods.toJSON = function () {
-  const obj = this.toObject();
-  delete obj.password;
-  delete obj.refreshToken;
-  return obj;
 };
 
 module.exports = mongoose.model('User', userSchema);

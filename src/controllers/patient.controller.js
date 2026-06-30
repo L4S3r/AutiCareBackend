@@ -3,7 +3,23 @@ const BehaviorLog = require('../models/BehaviorLog.model');
 const NutritionPlan = require('../models/NutritionPlan.model');
 const GeneticReport = require('../models/GeneticReport.model');
 const GameScore = require('../models/GameScore.model');
-const { uploadStream } = require('../services/storage.service');
+const { uploadStream, deleteFile } = require('../services/storage.service');
+
+// Helper: Verify user access to patient file (IDOR prevention)
+const checkAccess = (patient, user) => {
+  if (user.role === 'admin') return true;
+  if (user.role === 'Child') {
+    return patient._id.toString() === user._id.toString();
+  }
+  if (user.role === 'parent') {
+    return patient.parentId.toString() === user._id.toString();
+  }
+  const isAssigned =
+    (patient.assignedDoctor && patient.assignedDoctor.toString() === user._id.toString()) ||
+    (Array.isArray(patient.assignedTherapists) &&
+      patient.assignedTherapists.some((t) => t.toString() === user._id.toString()));
+  return !!isAssigned;
+};
 
 // @route GET /api/patients
 const getPatients = async (req, res, next) => {
@@ -31,8 +47,6 @@ const createPatient = async (req, res, next) => {
   try {
     const { name, dateOfBirth, gender, diagnosisDate, asdLevel } = req.body;
 
-    // parentId: parents always own their own child record.
-    // Doctors/admins must supply a valid parentId that has been validated by the Joi schema.
     const parentId = req.user.role === 'parent' ? req.user._id : req.body.parentId;
     if (!parentId) {
       return res.status(400).json({ error: 'parentId is required for non-parent roles.' });
@@ -58,44 +72,28 @@ const getPatient = async (req, res, next) => {
       .populate('assignedDoctor', 'name email specialization')
       .populate('assignedTherapists', 'name email');
     if (!patient) return res.status(404).json({ error: 'Patient not found' });
+    
+    if (!checkAccess(patient, req.user)) {
+      return res.status(403).json({ error: 'Access Denied: You do not have authorization for this patient profile.' });
+    }
+
     res.json({ success: true, data: patient });
   } catch (err) { next(err); }
 };
 
 // @route PUT /api/patients/:id
 // req.body is pre-sanitized by validate(updatePatientSchema) on the route.
-// Only the whitelisted fields below may ever reach the database.
 const updatePatient = async (req, res, next) => {
   try {
-    // ─── Assignment Authorization Gate ────────────────────────────────────────
-    // Before touching the document, verify the requesting doctor is explicitly
-    // assigned to this patient. Without this check any authenticated doctor
-    // could mutate any child profile (IDOR vulnerability).
-    if (req.user.role === 'doctor') {
-      const existing = await ChildProfile.findById(req.params.id)
-        .select('assignedDoctor assignedTherapists')
-        .lean();
+    const patient = await ChildProfile.findById(req.params.id);
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
-      if (!existing) return res.status(404).json({ error: 'Patient not found' });
-
-      const doctorId   = req.user._id.toString();
-      const isAssigned =
-        // Primary clinician match
-        (existing.assignedDoctor && existing.assignedDoctor.toString() === doctorId) ||
-        // Care-team array membership (therapists array may also hold consultant doctors)
-        (Array.isArray(existing.assignedTherapists) &&
-          existing.assignedTherapists.some((t) => t.toString() === doctorId));
-
-      if (!isAssigned) {
-        return res.status(403).json({
-          error: 'Access Denied: You are not explicitly assigned as the primary clinician for this case profile.',
-        });
-      }
+    if (!checkAccess(patient, req.user)) {
+      return res.status(403).json({ error: 'Access Denied: You do not have authorization for this patient profile.' });
     }
 
     const { name, dateOfBirth, gender, diagnosisDate, asdLevel, notes, allergies, currentMedications } = req.body;
 
-    // Build the update payload from only the fields that were actually provided
     const update = {};
     if (name               !== undefined) update.name               = name;
     if (dateOfBirth        !== undefined) update.dateOfBirth        = dateOfBirth;
@@ -106,13 +104,12 @@ const updatePatient = async (req, res, next) => {
     if (allergies          !== undefined) update.allergies          = allergies;
     if (currentMedications !== undefined) update.currentMedications = currentMedications;
 
-    const patient = await ChildProfile.findByIdAndUpdate(
+    const updatedPatient = await ChildProfile.findByIdAndUpdate(
       req.params.id,
-      { $set: update },           // $set prevents wholesale document replacement
+      { $set: update },
       { new: true, runValidators: true }
     );
-    if (!patient) return res.status(404).json({ error: 'Patient not found' });
-    res.json({ success: true, data: patient });
+    res.json({ success: true, data: updatedPatient });
   } catch (err) { next(err); }
 };
 
@@ -120,13 +117,18 @@ const updatePatient = async (req, res, next) => {
 const getPatientSummary = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const [patient, recentLogs, latestPlan, gameScores] = await Promise.all([
-      ChildProfile.findById(id).populate('assignedDoctor', 'name').populate('parentId', 'name'),
+    const patient = await ChildProfile.findById(id).populate('assignedDoctor', 'name').populate('parentId', 'name');
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+    if (!checkAccess(patient, req.user)) {
+      return res.status(403).json({ error: 'Access Denied: You do not have authorization for this patient profile.' });
+    }
+
+    const [recentLogs, latestPlan, gameScores] = await Promise.all([
       BehaviorLog.find({ childId: id }).sort('-date').limit(7),
       NutritionPlan.findOne({ childId: id, approved: true }).sort('-approvedAt'),
       GameScore.find({ childId: id }).sort('-createdAt').limit(10),
     ]);
-    if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
     const avgSleep = recentLogs.length ? recentLogs.reduce((s, l) => s + (l.sleepHours || 0), 0) / recentLogs.length : 0;
     const totalMeltdowns = recentLogs.reduce((s, l) => s + (l.meltdowns || 0), 0);
@@ -140,8 +142,8 @@ const updateAvatar = async (req, res, next) => {
     const patient = await ChildProfile.findById(req.params.id);
     if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
-    if (req.user.role === 'parent' && patient.parentId.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ error: 'Access Denied: You are not authorized for this patient profile.' });
+    if (!checkAccess(patient, req.user)) {
+      return res.status(403).json({ error: 'Access Denied: You do not have authorization for this patient profile.' });
     }
 
     let avatarUrl = null;
@@ -173,8 +175,8 @@ const uploadBirthCertificate = async (req, res, next) => {
     const patient = await ChildProfile.findById(req.params.id);
     if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
-    if (req.user.role === 'parent' && patient.parentId.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ error: 'Access Denied: You are not authorized for this patient profile.' });
+    if (!checkAccess(patient, req.user)) {
+      return res.status(403).json({ error: 'Access Denied: You do not have authorization for this patient profile.' });
     }
 
     if (!req.file) {
@@ -197,4 +199,68 @@ const uploadBirthCertificate = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getPatients, createPatient, getPatient, updatePatient, getPatientSummary, updateAvatar, uploadBirthCertificate };
+// @route DELETE /api/patients/:id
+const deletePatient = async (req, res, next) => {
+  try {
+    const patient = await ChildProfile.findById(req.params.id);
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+    // IDOR validation (only parent and admin can delete profiles)
+    if (req.user.role !== 'admin' && patient.parentId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Access Denied: Only the parent or admin can delete this profile.' });
+    }
+
+    // Delete Cloudinary assets (avatar, birthCertificate)
+    if (patient.avatar) {
+      try {
+        await deleteFile(patient.avatar);
+      } catch (e) {
+        console.error('Failed to delete avatar from Cloudinary:', e.message);
+      }
+    }
+    if (patient.birthCertificateUrl) {
+      try {
+        await deleteFile(patient.birthCertificateUrl);
+      } catch (e) {
+        console.error('Failed to delete birth certificate from Cloudinary:', e.message);
+      }
+    }
+
+    // Delete all genetic reports and their files from Cloudinary
+    const reports = await GeneticReport.find({ childId: patient._id });
+    for (const r of reports) {
+      if (r.reportFileUrl) {
+        try {
+          await deleteFile(r.reportFileUrl);
+        } catch (e) {
+          console.error('Failed to delete report file from Cloudinary:', e.message);
+        }
+      }
+    }
+
+    // Cascading delete related models
+    await BehaviorLog.deleteMany({ childId: patient._id });
+    await NutritionPlan.deleteMany({ childId: patient._id });
+    await GeneticReport.deleteMany({ childId: patient._id });
+    await GameScore.deleteMany({ childId: patient._id });
+
+    // Delete ChildProfile document
+    await patient.deleteOne();
+
+    res.json({
+      success: true,
+      message: 'Patient profile and all associated data purged successfully.'
+    });
+  } catch (err) { next(err); }
+};
+
+module.exports = {
+  getPatients,
+  createPatient,
+  getPatient,
+  updatePatient,
+  getPatientSummary,
+  updateAvatar,
+  uploadBirthCertificate,
+  deletePatient
+};
