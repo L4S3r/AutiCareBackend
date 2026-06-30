@@ -320,6 +320,22 @@ Set all environment variables in the **Vercel dashboard** under Project → Sett
 
 ---
 
+## Recent Implementations & Features
+
+### 1. Automated Layout-Aware PDF Parsing (AI Microservice)
+- **FastAPI Endpoint (`/api/ai/parse-pdf`)**: Employs `pdfminer.six` for high-fidelity layout-aware text extraction from pediatric files, enabling deep semantic analysis by Gemini.
+- **Dynamic Nutrition Integration**: Seamlessly maps clinical parameters directly to pediatric nutrigenomics plans, allowing automatic generation and loading of diets.
+
+### 2. Multi-Role Administrator Override Gateways
+- **Unified Directory Registry (`GET /api/admin/users`)**: Performs a concurrent, aggregated query thread across both the adult `User` and detached `ChildProfile` database collections to build a unified registry.
+- **Direct Verify Bypass (`PUT /api/admin/users/:id/verify-bypass`)**: Admin gateway to manually bypass Firebase verification link issues and force activation (`isVerified: true`, `isActive: true`).
+- **High-Entropy Password Mutation (`PUT /api/admin/users/:id/password`)**: Hashes new passwords with `bcrypt` (12 rounds) and commits changes directly across collections.
+
+### 3. Cascading Profile Deletion Safeguards
+- **Integrity Enforcement**: Deleting a caregiver/parent profile automatically executes a cascading delete pipeline targeting associated child profiles, logs, and compliance tables, preventing database rot.
+
+---
+
 ## Related Repositories
 
 | Repo | Description |
