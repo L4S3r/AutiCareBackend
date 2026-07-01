@@ -115,7 +115,7 @@ const uploadReport = async (req, res, next) => {
           const blob = new Blob([req.file.buffer], { type: 'application/pdf' });
           formData.append('file', blob, 'report.pdf');
 
-          const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+          const aiServiceUrl = process.env.AI_SERVICE_URL;
           const parseRes = await axios.post(`${aiServiceUrl}/parse-pdf`, formData, {
             timeout: 20000
           });

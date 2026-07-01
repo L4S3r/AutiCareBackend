@@ -22,7 +22,7 @@ const uploadStream = (fileBuffer, options = {}) => {
   return new Promise((resolve, reject) => {
     if (!hasCredentials) {
       const publicId = `mock_${Date.now()}`;
-      const ext = options.format || 'png';
+      const ext = options.format;
       return resolve({
         public_id: publicId,
         secure_url: `https://res.cloudinary.com/demo/image/upload/v1234567890/${publicId}.${ext}`,
@@ -78,7 +78,7 @@ const deleteFile = async (url) => {
  */
 const uploadFile = async (fileBuffer, customPath) => {
   const options = {
-    resource_type: 'auto', // ⚡ Tells Cloudinary to automatically accept PDFs and documents
+    resource_type: 'auto',
     public_id: customPath ? customPath.replace(/\.[^/.]+$/, "") : `report_${Date.now()}`
   };
 

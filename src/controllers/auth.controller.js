@@ -8,6 +8,7 @@ const { getAuth } = require('firebase-admin/auth');
 const { generateToken, generateRefreshToken } = require('../middleware/auth.middleware');
 const { sendWelcomeEmail, sendPasswordResetEmail, sendChildCredentialsEmail } = require('../services/email.service');
 const { uploadStream } = require('../services/storage.service');
+const { uploadFile } = require('../services/storage.service');
 
 const normalizeAsdLevel = (level) => (level || 'level1').replace(/\s+/g, '').toLowerCase();
 const normalizeGender = (gender) => (gender || 'male').toLowerCase();
@@ -125,6 +126,7 @@ const register = async (req, res, next) => {
         }
       };
 
+
       avatarUrl = await uploadHelper(req.files['avatar']?.[0], 'auticare/avatars');
       birthCertificateUrl = await uploadHelper(req.files['birthCertificate']?.[0], 'auticare/birth_certificates');
       nationalIdDocUrl = await uploadHelper(req.files['nationalIdDoc']?.[0], 'auticare/verification');
@@ -183,9 +185,15 @@ const register = async (req, res, next) => {
       clinic: clinic || undefined,
       avatar: resolvedRole !== 'parent' ? avatarUrl : undefined,
       birthCertificateUrl,
+      // ⚡ KEEP THERAPIST KEY CONNECTIONS:
       nationalIdFront: nationalIdFrontUrl,
       nationalIdBack: nationalIdBackUrl,
       certificates: certificatesUrls,
+
+      // ⚡ ADD DOCTOR KEY CONNECTIONS SO THEY WRITE TO MONGO:
+      nationalIdDoc: nationalIdDocUrl,
+      medLicenseDoc: medLicenseDocUrl,
+      cvDoc: cvDocUrl,
     });
 
     // Generate JWT tokens
@@ -451,7 +459,7 @@ const firebaseLogin = async (req, res, next) => {
     if (isNew) {
       try {
         // Google users are already verified via Google — just send a welcome (no verify link needed)
-        await sendWelcomeEmail(user.email, user.name, process.env.FRONTEND_URL || 'https://auti-care-frontend.vercel.app/app/login');
+        await sendWelcomeEmail(user.email, user.name, process.env.FRONTEND_URL);
         await Notification.create({
           userId: user._id,
           title: 'Welcome to AutiCare!',
@@ -500,7 +508,7 @@ const handleForgotPasswordRequest = async (req, res, next) => {
     if (!email) return res.status(400).json({ error: 'Email is required.' });
 
     const resetLink = await getAuth().generatePasswordResetLink(email, {
-      url: process.env.FRONTEND_URL || 'https://auti-care-frontend.vercel.app/app/login',
+      url: process.env.FRONTEND_URL,
     });
 
     await sendPasswordResetEmail(email, 'AutiCare User', resetLink);
@@ -539,7 +547,7 @@ const verifyEmailCallback = async (req, res, next) => {
       { isVerified: true },
     );
 
-    const frontendUrl = process.env.FRONTEND_URL || 'https://auti-care-frontend.vercel.app/app/login';
+    const frontendUrl = process.env.FRONTEND_URL;
     return res.redirect(`${frontendUrl}?verified=true`);
   } catch (err) {
     next(err);
