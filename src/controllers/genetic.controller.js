@@ -21,11 +21,11 @@ const checkAccess = (patient, user) => {
 
 // ─── Confirmed MIME table (mirrors magic-byte check in genetic.routes.js) ────
 const SIGNATURE_MIME_MAP = [
-  { bytes: [0x25, 0x50, 0x44, 0x46, 0x2D], mime: 'application/pdf', ext: 'pdf'  },
-  { bytes: [0x89, 0x50, 0x4E, 0x47, 0x0D], mime: 'image/png',       ext: 'png'  },
-  { bytes: [0xFF, 0xD8, 0xFF],             mime: 'image/jpeg',      ext: 'jpg'  },
-  { bytes: [0x47, 0x49, 0x46, 0x38],       mime: 'image/gif',       ext: 'gif'  },
-  { bytes: [0x52, 0x49, 0x46, 0x46],       mime: 'image/webp',      ext: 'webp' },
+  { bytes: [0x25, 0x50, 0x44, 0x46, 0x2D], mime: 'application/pdf', ext: 'pdf' },
+  { bytes: [0x89, 0x50, 0x4E, 0x47, 0x0D], mime: 'image/png', ext: 'png' },
+  { bytes: [0xFF, 0xD8, 0xFF], mime: 'image/jpeg', ext: 'jpg' },
+  { bytes: [0x47, 0x49, 0x46, 0x38], mime: 'image/gif', ext: 'gif' },
+  { bytes: [0x52, 0x49, 0x46, 0x46], mime: 'image/webp', ext: 'webp' },
 ];
 
 const getMimeFromBuffer = (buf) => {
@@ -117,9 +117,6 @@ const uploadReport = async (req, res, next) => {
 
           const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
           const parseRes = await axios.post(`${aiServiceUrl}/parse-pdf`, formData, {
-            headers: {
-              'Content-Type': 'multipart/form-data'
-            },
             timeout: 20000
           });
 

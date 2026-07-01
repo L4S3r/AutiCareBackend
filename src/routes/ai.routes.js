@@ -151,7 +151,7 @@ router.post('/predict/:childId', async (req, res, next) => {
       if (response.data) {
         const prediction = response.data;
         console.log('✅ FastAPI prediction received — Risk Score:', prediction.riskScore, '| Level:', prediction.riskLevel);
-        
+
         // Trigger email & in-app alerts if risk is high
         await triggerHighRiskAlerts(child, prediction.riskScore, prediction.interventions);
 

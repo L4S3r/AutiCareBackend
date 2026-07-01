@@ -4,7 +4,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
-
+const aiGatewayRoutes = require('./routes/aiGatewayRoutes');
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const patientRoutes = require('./routes/patient.routes');
@@ -107,7 +107,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/notes', noteRoutes);
 app.use('/api/contact', contactRoutes);
-
+app.use('/api/ai', aiGatewayRoutes);
 
 // 404
 app.use((req, res) => {
