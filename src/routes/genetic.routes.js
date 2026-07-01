@@ -6,6 +6,7 @@ const { validate, schemas } = require('../middleware/validate.middleware');
 const { getReports, getReport, updateMarkers } = require('../controllers/genetic.controller');
 const NutritionPlan = require('../models/NutritionPlan.model');
 const { generateGeneticNutritionPlan } = require('../services/aiGatewayService');
+const GeneticReport = require('../models/GeneticReport.model');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -53,9 +54,21 @@ router.post('/upload', authorize('doctor', 'admin'), upload.single('reportFile')
       if (targets.protein_g) planText += `- **Protein:** ${targets.protein_g}g\n`;
     }
 
+    const newReport = new GeneticReport({
+      childId: childId,
+      fileName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      fileSize: req.file.size,
+      status: 'processed',
+      markers: ragResponse.genetic_markers_detected || [], // Saves to left panel
+      generatedPlanId: null // We will link this below
+    });
+    const savedReport = await newReport.save();
+
     // 3. Hydrate your custom database sub-schema structures natively
     const newPlan = new NutritionPlan({
       childId: childId,
+      reportId: savedReport._id,
       status: ragResponse.requires_doctor_review ? 'pending_review' : 'approved',
       approved: !ragResponse.requires_doctor_review,
       aiRecommendation: {
@@ -78,8 +91,12 @@ router.post('/upload', authorize('doctor', 'admin'), upload.single('reportFile')
       }
     });
 
-    const savedRecord = await newPlan.save();
-    return res.status(201).json({ success: true, data: savedRecord });
+    const savedPlan = await newPlan.save();
+
+    // 3. Link the plan back into the report document
+    savedReport.generatedPlanId = savedPlan._id;
+    await savedReport.save();
+    return res.status(201).json({ success: true, report: savedReport, plan: savedPlan });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
