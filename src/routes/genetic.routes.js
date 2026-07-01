@@ -7,6 +7,7 @@ const { getReports, getReport, updateMarkers } = require('../controllers/genetic
 const NutritionPlan = require('../models/NutritionPlan.model');
 const { generateGeneticNutritionPlan } = require('../services/aiGatewayService');
 const GeneticReport = require('../models/GeneticReport.model');
+const { uploadFile } = require('../services/storageService');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -42,6 +43,7 @@ router.post('/upload', authorize('doctor', 'admin'), upload.single('reportFile')
     const { childId } = req.body;
     if (!req.file || !childId) return res.status(400).json({ error: 'Missing required parameters.' });
 
+    const storageResult = await uploadFile(req.file.buffer, `genetic-reports/${childId}/${Date.now()}-${req.file.originalname}`);
     // 1. Dispatch file buffer to your persistent local RAG docker service container
     const ragResponse = await generateGeneticNutritionPlan(req.file.buffer, req.file.originalname, req.file.mimetype, childId);
 
@@ -60,6 +62,7 @@ router.post('/upload', authorize('doctor', 'admin'), upload.single('reportFile')
       fileName: req.file.originalname,
       mimeType: req.file.mimetype,
       fileSize: req.file.size,
+      fileUrl: storageResult.url,
       status: 'processed',
       markers: ragResponse.genetic_markers_detected || [], // Saves to left panel
       generatedPlanId: null // We will link this below
