@@ -56,6 +56,7 @@ router.post('/upload', authorize('doctor', 'admin'), upload.single('reportFile')
 
     const newReport = new GeneticReport({
       childId: childId,
+      uploadedBy: req.user._id,
       fileName: req.file.originalname,
       mimeType: req.file.mimetype,
       fileSize: req.file.size,
