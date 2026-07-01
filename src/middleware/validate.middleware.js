@@ -23,6 +23,7 @@ const registerSchema = Joi.object({
   clinic: Joi.string().trim().max(120).optional().allow('', null),
 
   // Professional credential parameters (validated optionally, sanitization active)
+  nationalIdDoc: Joi.string().optional().allow('', null),
   nationalIdFront: Joi.string().optional().allow('', null),
   nationalIdBack: Joi.string().optional().allow('', null),
   certificates: Joi.array().items(Joi.string().allow('', null)).optional(),

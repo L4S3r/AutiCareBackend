@@ -67,7 +67,7 @@ const syncFirebaseUser = async (email, password, displayName) => {
 
 const sendVerificationEmail = async (email, name) => {
   const verificationLink = await getAuth().generateEmailVerificationLink(email, {
-    url: process.env.FRONTEND_URL || 'https://auti-care-frontend.vercel.app/app/login',
+    url: process.env.FRONTEND_URL,
   });
   await sendWelcomeEmail(email, name, verificationLink);
   console.log(`✉️ Custom verification email sent to: ${email}`);
@@ -103,6 +103,7 @@ const register = async (req, res, next) => {
 
     let avatarUrl = undefined;
     let birthCertificateUrl = undefined;
+    let nationalIdDocUrl = undefined;
     let nationalIdFrontUrl = undefined;
     let nationalIdBackUrl = undefined;
     let certificatesUrls = [];
@@ -124,9 +125,10 @@ const register = async (req, res, next) => {
 
       avatarUrl = await uploadHelper(req.files['avatar']?.[0], 'auticare/avatars');
       birthCertificateUrl = await uploadHelper(req.files['birthCertificate']?.[0], 'auticare/birth_certificates');
+      nationalIdDocUrl = await uploadHelper(req.files['nationalIdDoc']?.[0], 'auticare/verification');
       nationalIdFrontUrl = await uploadHelper(req.files['nationalIdFront']?.[0], 'auticare/verification');
       nationalIdBackUrl = await uploadHelper(req.files['nationalIdBack']?.[0], 'auticare/verification');
-      
+
       const certFiles = req.files['certificates'] || [];
       for (const file of certFiles) {
         const url = await uploadHelper(file, 'auticare/verification');
@@ -385,14 +387,14 @@ const firebaseLogin = async (req, res, next) => {
 
     const { email, uid, email_verified: firebaseEmailVerified } = decodedToken;
     let user = await User.findOne({ email });
-    
+
     if (user && !user.isActive) {
       return res.status(403).json({
         error: 'Account suspended. Contact your clinical administrator.',
         code: 'ACCOUNT_DISABLED',
       });
     }
-    
+
     let isNew = false;
 
     if (!user) {
