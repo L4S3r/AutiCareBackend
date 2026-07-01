@@ -70,7 +70,24 @@ const deleteFile = async (url) => {
   });
 };
 
+/**
+ * Standardized wrapper converting memory buffers directly into Cloudinary asset targets.
+ * @param {Buffer} fileBuffer 
+ * @param {string} customPath 
+ * @returns {Promise<Object>}
+ */
+const uploadFile = async (fileBuffer, customPath) => {
+  const options = {
+    resource_type: 'auto', // ⚡ Tells Cloudinary to automatically accept PDFs and documents
+    public_id: customPath ? customPath.replace(/\.[^/.]+$/, "") : `report_${Date.now()}`
+  };
+
+  const result = await uploadStream(fileBuffer, options);
+  return { url: result.secure_url, public_id: result.public_id };
+};
+
 module.exports = {
   uploadStream,
   deleteFile,
+  uploadFile,
 };

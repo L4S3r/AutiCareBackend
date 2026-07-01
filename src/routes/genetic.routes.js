@@ -64,7 +64,12 @@ router.post('/upload', authorize('doctor', 'admin'), upload.single('reportFile')
       fileSize: req.file.size,
       fileUrl: storageResult.url,
       status: 'processed',
-      markers: ragResponse.genetic_markers_detected || [], // Saves to left panel
+      parsedMarkers: (ragResponse.genetic_markers_detected || []).map(m => ({
+        marker: m.marker || m,
+        result: m.result || 'unknown',
+        notes: m.notes || ''
+      })),
+      isProcessed: true,
       generatedPlanId: null // We will link this below
     });
     const savedReport = await newReport.save();
