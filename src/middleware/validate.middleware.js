@@ -26,6 +26,7 @@ const registerSchema = Joi.object({
   nationalIdDoc: Joi.string().optional().allow('', null),
   nationalIdFront: Joi.string().optional().allow('', null),
   nationalIdBack: Joi.string().optional().allow('', null),
+  medLicenseDoc: Joi.string().optional().allow('', null),
   certificates: Joi.array().items(Joi.string().allow('', null)).optional(),
 
   // Required child bootstrap fields for parent signups

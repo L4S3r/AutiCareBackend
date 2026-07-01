@@ -106,6 +106,7 @@ const register = async (req, res, next) => {
     let nationalIdDocUrl = undefined;
     let nationalIdFrontUrl = undefined;
     let nationalIdBackUrl = undefined;
+    let medLicenseDocUrl = undefined;
     let certificatesUrls = [];
 
     if (req.files) {
@@ -128,6 +129,7 @@ const register = async (req, res, next) => {
       nationalIdDocUrl = await uploadHelper(req.files['nationalIdDoc']?.[0], 'auticare/verification');
       nationalIdFrontUrl = await uploadHelper(req.files['nationalIdFront']?.[0], 'auticare/verification');
       nationalIdBackUrl = await uploadHelper(req.files['nationalIdBack']?.[0], 'auticare/verification');
+      medLicenseDocUrl = await uploadHelper(req.files['medLicenseDoc']?.[0], 'auticare/verification');
 
       const certFiles = req.files['certificates'] || [];
       for (const file of certFiles) {

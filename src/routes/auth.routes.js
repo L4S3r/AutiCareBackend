@@ -9,6 +9,7 @@ router.post('/register', upload.fields([
   { name: 'avatar', maxCount: 1 },
   { name: 'birthCertificate', maxCount: 1 },
   { name: 'nationalIdDoc', maxCount: 1 },
+  { name: 'medLicenseDoc', maxCount: 1 },
   { name: 'nationalIdFront', maxCount: 1 },
   { name: 'nationalIdBack', maxCount: 1 },
   { name: 'certificates', maxCount: 5 }
