@@ -51,7 +51,7 @@ router.post('/upload', authorize('doctor', 'admin'), upload.single('reportFile')
     let planText = `${ragResponse?.nutrition_plan?.summary || 'No summary provided.'}\n\n`;
     if (ragResponse?.nutrition_plan?.daily_targets) {
       const targets = ragResponse.nutrition_plan.daily_targets;
-      planText += `### 📊 Daily Nutritional Targets:\n`;
+      planText += `📊 Daily Nutritional Targets:\n`;
       if (targets.calories) planText += `- **Calories:** ${targets.calories} kcal\n`;
       if (targets.protein_g) planText += `- **Protein:** ${targets.protein_g}g\n`;
     }
