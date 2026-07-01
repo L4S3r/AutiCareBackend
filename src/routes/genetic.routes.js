@@ -7,7 +7,7 @@ const { getReports, getReport, updateMarkers } = require('../controllers/genetic
 const NutritionPlan = require('../models/NutritionPlan.model');
 const { generateGeneticNutritionPlan } = require('../services/aiGatewayService');
 const GeneticReport = require('../models/GeneticReport.model');
-const { uploadFile } = require('../services/storageService');
+const { uploadFile } = require('../services/storage.service');
 
 const upload = multer({
   storage: multer.memoryStorage(),
