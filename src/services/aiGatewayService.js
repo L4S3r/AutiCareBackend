@@ -36,7 +36,7 @@ async function generateGeneticNutritionPlan(fileBuffer, originalName, mimeType, 
         const response = await axios.post(`${RAG_SERVICE_URL}/generate-nutrition-plan`, form, {
             headers: {
                 ...form.getHeaders(),
-                'X-API-Key': RAG_API_SECRET_KEY,
+                'X-API-Key': process.env.RAG_API_SECRET_KEY,
                 'Bypass-Tunnel-Warning': 'true'
             },
             maxContentLength: Infinity,

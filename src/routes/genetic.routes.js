@@ -46,8 +46,8 @@ router.post('/upload', authorize('doctor', 'admin'), upload.single('reportFile')
     const ragResponse = await generateGeneticNutritionPlan(req.file.buffer, req.file.originalname, req.file.mimetype, childId);
 
     // 2. Synthesize flat macro integers cleanly into descriptive markdown format blocks
-    let planText = `${ragResponse.nutrition_plan.summary}\n\n`;
-    if (ragResponse.nutrition_plan.daily_targets) {
+    let planText = `${ragResponse?.nutrition_plan?.summary || 'No summary provided.'}\n\n`;
+    if (ragResponse?.nutrition_plan?.daily_targets) {
       const targets = ragResponse.nutrition_plan.daily_targets;
       planText += `### 📊 Daily Nutritional Targets:\n`;
       if (targets.calories) planText += `- **Calories:** ${targets.calories} kcal\n`;
@@ -74,11 +74,11 @@ router.post('/upload', authorize('doctor', 'admin'), upload.single('reportFile')
       aiRecommendation: {
         nutritionPlan: planText.trim(),
         foodRestrictions: ragResponse.nutrition_plan.foods_to_avoid || [],
-        supplements: (ragResponse.nutrition_plan.supplements || []).map(s => ({
-          name: s.name,
-          dosage: s.dose,
-          frequency: s.frequency,
-          notes: s.reason
+        supplements: (ragResponse?.nutrition_plan?.supplements || []).map(s => ({
+          name: s?.name || 'Unknown Supplement',
+          dosage: s?.dose || s?.dosage || 'N/A',
+          frequency: s?.frequency || 'N/A',
+          notes: s?.reason || s?.notes || ''
         })),
         mealSuggestions: [{
           mealType: 'Recommended Focus Foods',
@@ -98,6 +98,7 @@ router.post('/upload', authorize('doctor', 'admin'), upload.single('reportFile')
     await savedReport.save();
     return res.status(201).json({ success: true, report: savedReport, plan: savedPlan });
   } catch (error) {
+    console.error("CRITICAL UPLOAD FAULT:", error);
     return res.status(500).json({ error: error.message });
   }
 });
